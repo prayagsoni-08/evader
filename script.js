@@ -101,14 +101,22 @@ let playerName = "";
 try { playerName = localStorage.getItem("evader-player-name") || ""; } catch { /* storage unavailable */ }
 function cleanName(value) { return String(value || "").replace(/[^\p{L}\p{N} _.-]/gu, "").trim().slice(0, 16); }
 nameInput.value = cleanName(playerName);
-function syncName() { continueButton.disabled = cleanName(nameInput.value).length < 2; }
-nameInput.addEventListener("input", syncName);
+function syncName() {
+  const ok = cleanName(nameInput.value).length >= 2;
+  continueButton.classList.toggle("is-inactive", !ok);
+  if (ok) crewStatus.textContent = "";
+}
+["input", "change", "keyup", "compositionend"].forEach((type) => nameInput.addEventListener(type, syncName));
 nameInput.addEventListener("keydown", (event) => { if (event.key === "Enter") continueButton.click(); });
 syncName();
 playButton.addEventListener("click", () => { showScreen(crewScreen); nameInput.focus(); });
 document.getElementById("back-to-home").addEventListener("click", (event) => { event.preventDefault(); showScreen(landingScreen); playButton.focus(); });
 continueButton.addEventListener("click", () => {
-  if (continueButton.disabled) return;
+  if (cleanName(nameInput.value).length < 2) {
+    crewStatus.textContent = "Enter a name with at least 2 letters or numbers.";
+    nameInput.focus();
+    return;
+  }
   playerName = cleanName(nameInput.value);
   nameInput.value = playerName;
   try { localStorage.setItem("evader-player-name", playerName); } catch { /* storage unavailable */ }

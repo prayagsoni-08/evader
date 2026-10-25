@@ -774,3 +774,6 @@ html[data-sound="on"] .sound-toggle { border-color: var(--red); color: var(--red
 .slot.filled { border-style: solid; border-color: var(--paper); color: var(--paper); }
 .lobby-start { margin-top: 0.5rem; }
 @media (max-width: 46rem) { .team-split { grid-template-columns: 1fr; } }
+
+.button.is-inactive { opacity: 0.55; }
+@media (max-width: 46rem) { .sound-toggle { bottom: 0.75rem; right: 0.75rem; width: 2.5rem; height: 2.5rem; } .crew-content { padding-bottom: 5rem; } }
