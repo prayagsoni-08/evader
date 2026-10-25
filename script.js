@@ -26,19 +26,58 @@ let isRoomHost = false;
 let roomPlayerId = window.crypto?.randomUUID ? window.crypto.randomUUID() : `player-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let roomConfig = null;
 
-const savedSound = localStorage.getItem("evader-sound-enabled");
-setSoundEnabled(savedSound === "true");
+// ---------- Audio: looping background track + click sound ----------
+const bgMusic = new Audio("bellachao.m4a");
+bgMusic.loop = true;
+bgMusic.volume = 0.5;
+bgMusic.preload = "auto";
+const clickSound = new Audio("click.mp3");
+clickSound.preload = "auto";
+clickSound.volume = 0.7;
+
+// Sound is on by default; only an explicit "false" saved by the toggle turns it off.
+function readSavedSound() { try { return localStorage.getItem("evader-sound-enabled") !== "false"; } catch { return true; } }
+function saveSound(enabled) { try { localStorage.setItem("evader-sound-enabled", String(enabled)); } catch { /* storage unavailable */ } }
+function isSoundOn() { return soundToggle.getAttribute("aria-pressed") === "true"; }
+
+function startMusic() {
+  if (!isSoundOn()) return;
+  const attempt = bgMusic.play();
+  if (attempt && attempt.catch) attempt.catch(() => { /* autoplay blocked; retried on first interaction */ });
+}
 function setSoundEnabled(enabled) {
   soundToggle.setAttribute("aria-pressed", String(enabled));
   soundToggle.setAttribute("aria-label", enabled ? "Turn sound off" : "Turn sound on");
   soundToggle.title = enabled ? "Sound on" : "Sound off";
-  localStorage.setItem("evader-sound-enabled", String(enabled));
+  saveSound(enabled);
   document.documentElement.dataset.sound = enabled ? "on" : "off";
+  if (enabled) startMusic(); else bgMusic.pause();
 }
+setSoundEnabled(readSavedSound());
+
+// Browsers block autoplay, so start the music on the first click, key press or touch.
+["pointerdown", "keydown", "touchstart"].forEach((type) =>
+  document.addEventListener(type, function unlock() {
+    startMusic();
+    if (!bgMusic.paused || !isSoundOn()) {
+      ["pointerdown", "keydown", "touchstart"].forEach((t) => document.removeEventListener(t, unlock, true));
+    }
+  }, true)
+);
+
+// Click sound for every button on every screen
+document.addEventListener("click", (event) => {
+  if (!isSoundOn()) return;
+  const button = event.target.closest("button");
+  if (!button || button.disabled) return;
+  const sfx = clickSound.cloneNode();
+  sfx.volume = clickSound.volume;
+  sfx.play().catch(() => {});
+});
+
 soundToggle.addEventListener("click", () => {
-  const enabled = soundToggle.getAttribute("aria-pressed") !== "true";
-  setSoundEnabled(enabled);
-  statusMessage.textContent = enabled ? "Sound enabled." : "Sound muted.";
+  setSoundEnabled(!isSoundOn());
+  statusMessage.textContent = isSoundOn() ? "Sound enabled." : "Sound muted.";
 });
 document.getElementById("about-button").addEventListener("click", () => aboutDialog.showModal());
 document.getElementById("close-about").addEventListener("click", () => aboutDialog.close());
@@ -102,10 +141,11 @@ function showBriefing() {
   roomDetails.textContent = crewChoices.mode === "multiplayer" ? `ROOM ${currentRoomCode || "LOCAL"} · ${selectedCrewCount} heist crew + ${selectedPoliceCount} police = ${selectedCrewCount + selectedPoliceCount} total players.` : "";
   const beginButton = document.getElementById("begin-operation");
   beginButton.disabled = crewChoices.mode === "multiplayer" && !isRoomHost;
-  beginButton.textContent = crewChoices.mode === "multiplayer" && !isRoomHost ? "Waiting for host" : "Begin operation ↗";
+  beginButton.innerHTML = crewChoices.mode === "multiplayer" && !isRoomHost ? "Waiting for host" : 'Begin operation <span class="button-arrow" aria-hidden="true">↗</span>';
   document.getElementById("back-to-crew").focus();
 }
 document.getElementById("back-to-setup").addEventListener("click", () => {
+  leaveRoom();
   lobbyScreen.hidden = true; crewScreen.hidden = false; window.scrollTo(0, 0); continueButton.focus();
 });
 document.getElementById("create-room").addEventListener("click", async () => {
@@ -118,6 +158,7 @@ document.getElementById("create-room").addEventListener("click", async () => {
   crewPlayerSelect.disabled = false;
   policePlayerSelect.disabled = false;
   roomConfig = { crewCount: Number(crewPlayerSelect.value), policeCount: Number(policePlayerSelect.value) };
+  document.getElementById("start-room").textContent = "Start game";
   document.getElementById("start-room").disabled = true;
   roomStatus.textContent = "Connecting to the online room…";
   try {
@@ -126,7 +167,7 @@ document.getElementById("create-room").addEventListener("click", async () => {
     policePlayerSelect.disabled = true;
     roomStatus.textContent = `Room ${code} is online. Share the code with your players.`;
     document.getElementById("start-room").focus();
-  } catch (error) { roomStatus.textContent = error.message; }
+  } catch (error) { await leaveRoom(); roomStatus.textContent = error.message; }
 });
 document.getElementById("join-room-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -152,14 +193,34 @@ document.getElementById("join-room-form").addEventListener("submit", async (even
       const others = currentRoomPlayers().filter((player) => player.playerId !== roomPlayerId);
       if (!others.length) roomStatus.textContent = `No active host found for ${code}. Check the code and make sure the host stays online.`;
     }, 2500);
-  } catch (error) { roomStatus.textContent = error.message; }
+  } catch (error) { await leaveRoom(); roomStatus.textContent = error.message; }
 });
 document.getElementById("start-room").addEventListener("click", async () => {
   if (!isRoomHost || document.getElementById("start-room").disabled) return;
-  await broadcastRoom("room-start", getRoomConfig());
+  try { await broadcastRoom("room-start", getRoomConfig()); }
+  catch (error) { roomStatus.textContent = error.message; return; }
   showBriefing();
 });
 
+function resetRoomUI() {
+  currentRoomCode = "";
+  isRoomHost = false;
+  roomConfig = null;
+  roomCreated.hidden = true;
+  document.getElementById("created-room-code").textContent = "----";
+  const startButton = document.getElementById("start-room");
+  startButton.textContent = "Start game";
+  startButton.disabled = true;
+  document.getElementById("room-player-status").textContent = "";
+  crewPlayerSelect.disabled = false;
+  policePlayerSelect.disabled = false;
+}
+async function leaveRoom() {
+  const channel = activeRoomChannel;
+  activeRoomChannel = null;
+  if (channel && supabaseClient) { try { await supabaseClient.removeChannel(channel); } catch { /* already closed */ } }
+  resetRoomUI();
+}
 function getRoomConfig() {
   return {
     crewCount: Number(crewPlayerSelect.value),
@@ -228,6 +289,7 @@ async function connectToRoom(code, host) {
     .on("broadcast", { event: "game-start" }, ({ payload }) => {
       if (isRoomHost) return;
       applyBoardSnapshot(payload.state);
+      lobbyScreen.hidden = true;
       gameScreen.hidden = true;
       document.getElementById("victory-screen").hidden = true;
       playScreen.hidden = false;
@@ -238,6 +300,7 @@ async function connectToRoom(code, host) {
       applyBoardSnapshot(payload.state);
       renderLiveBoard();
     });
+  let settled = false;
   await new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => reject(new Error("Room connection timed out. Check the project URL and key.")), 12000);
     channel.subscribe(async (status) => {
@@ -246,13 +309,19 @@ async function connectToRoom(code, host) {
         try {
           const tracked = await channel.track({ playerId: roomPlayerId, role: crewChoices.role, joinedAt: new Date().toISOString() });
           if (tracked !== "ok") throw new Error("Could not join the room presence channel.");
+          settled = true;
           resolve();
           if (!host) await broadcastRoom("room-config-request", {});
           updateRoomPresence();
         } catch (error) { reject(error); }
       } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
         window.clearTimeout(timeout);
-        reject(new Error(`Room connection failed (${status}). Check Supabase Realtime is enabled.`));
+        if (!settled) reject(new Error(`Room connection failed (${status}). Check Supabase Realtime is enabled.`));
+        else if (activeRoomChannel === channel) {
+          const lost = "Lost connection to the room. Go back to setup and rejoin.";
+          roomStatus.textContent = lost;
+          setGameMessage(lost);
+        }
       }
     });
   });
@@ -338,16 +407,18 @@ function isRemoteTurn() { return crewChoices.mode === "multiplayer" && activeRoo
 function renderLiveBoard() {
   liveBoard.replaceChildren();
   liveBoard.style.gridTemplateColumns = `repeat(${boardState.size}, minmax(0, 1fr))`;
-  liveBoard.style.backgroundSize = `calc(100% / ${boardState.size}) calc(100% / ${boardState.size})`;
+  liveBoard.style.gridTemplateRows = `repeat(${boardState.size}, minmax(0, 1fr))`;
+  liveBoard.style.setProperty("--n", String(boardState.size));
+  const focusedCell = document.activeElement?.classList?.contains("play-cell") ? { row: document.activeElement.dataset.row, col: document.activeElement.dataset.col } : null;
   document.getElementById("live-grid-size").innerHTML = `${String(boardState.size).padStart(2, "0")} <i>×</i> ${String(boardState.size).padStart(2, "0")}`;
   const selected = sidePieces(boardState.activeSide).find((piece) => piece.id === boardState.selectedId);
   const targets = selected ? legalMoves(selected, boardState.activeSide) : [];
   const hatch = boardState.hatchPositions[boardState.hatchIndex];
   for (let row = 0; row < boardState.size; row += 1) for (let col = 0; col < boardState.size; col += 1) {
     const cell = document.createElement("button"); cell.type = "button"; cell.className = "play-cell";
-    cell.setAttribute("role", "gridcell"); cell.setAttribute("aria-label", `Row ${row + 1}, column ${col + 1}`);
     cell.dataset.row = String(row); cell.dataset.col = String(col); cell.addEventListener("click", handleBoardCellClick);
     const occupant = pieceAt(row, col), isSelected = occupant?.piece.id === boardState.selectedId;
+    if (row === 0 || col === 0 || row === boardState.size - 1 || col === boardState.size - 1) cell.classList.add("edge-cell");
     if (isSelected) cell.classList.add("selected-cell");
     if (boardState.barricadeAnchor?.row === row && boardState.barricadeAnchor?.col === col) cell.classList.add("barricade-anchor");
     if (targets.some((m) => m.row === row && m.col === col)) cell.classList.add("legal-cell");
@@ -359,9 +430,16 @@ function renderLiveBoard() {
     if (occupant) token = occupant.side === "crew" ? [occupant.piece.carrying ? "N$" : "N", "crew-token", "Heist crew"] : ["P", "police-token", "Police"];
     else if (boardState.cash.available && row === boardState.cash.row && col === boardState.cash.col) token = ["$", "cash-token", "Cash"];
     else if (row === hatch.row && col === hatch.col) token = ["↗", "exit-token", "Moving escape hatch"];
-    if (token) { const marker = document.createElement("span"); marker.className = `play-token ${token[1]}`; marker.textContent = token[0]; marker.setAttribute("aria-label", token[2]); cell.append(marker); }
+    if (token) {
+      const marker = document.createElement("span");
+      marker.className = `play-token ${token[1]}${occupant?.piece.carrying ? " carrying" : ""}`;
+      marker.textContent = token[0]; marker.setAttribute("aria-hidden", "true"); cell.append(marker);
+    }
+    const isMove = cell.classList.contains("legal-cell");
+    cell.setAttribute("aria-label", `Row ${row + 1}, column ${col + 1}${token ? `, ${token[2]}${occupant?.piece.carrying ? " carrying cash" : ""}` : ""}${isSelected ? ", selected" : ""}${isMove ? ", legal move" : ""}${cell.classList.contains("wall-top") ? ", barricade above" : ""}${cell.classList.contains("wall-left") ? ", barricade left" : ""}`);
     liveBoard.append(cell);
   }
+  if (focusedCell) liveBoard.querySelector(`.play-cell[data-row="${focusedCell.row}"][data-col="${focusedCell.col}"]`)?.focus({ preventScroll: true });
   const crewTurn = boardState.activeSide === "crew";
   document.getElementById("turn-name").textContent = crewTurn ? "HEIST CREW" : "POLICE";
   document.getElementById("turn-indicator").classList.toggle("police-turn", !crewTurn);
@@ -397,9 +475,17 @@ function beginTeamPhase(side) {
   boardState.phaseIds = sidePieces(side).map((piece) => piece.id); boardState.actedIds = new Set();
   skipUnavailableActions();
 }
+let consecutiveSkips = 0;
 function skipUnavailableActions() {
+  if (consecutiveSkips > 4) {
+    // Neither team can move (barricades boxed everyone in). Clear them so play can continue.
+    consecutiveSkips = 0; boardState.walls.clear();
+    boardState.phaseIds.forEach((id) => boardState.actedIds.delete(id));
+    setGameMessage("Deadlock: every route was blocked, so the barricades were cleared.");
+  }
   const unacted = boardState.phaseIds.filter((id) => sidePieces(boardState.activeSide).some((p) => p.id === id) && !boardState.actedIds.has(id));
   if (!unacted.length) {
+    consecutiveSkips += 1;
     if (sidePieces("crew").length === 0) { declareWinnerIfOver(); renderLiveBoard(); if (boardState.winner) showVictoryScreen(); }
     else beginTeamPhase(boardState.activeSide === "crew" ? "police" : "crew");
     return;
@@ -408,6 +494,7 @@ function skipUnavailableActions() {
     unacted.forEach((id) => boardState.actedIds.add(id));
     skipUnavailableActions(); return;
   }
+  consecutiveSkips = 0;
   renderLiveBoard();
   if (isComputerTurn()) scheduleComputerMove();
 }
@@ -499,7 +586,7 @@ function showVictoryScreen() {
   document.getElementById("victory-copy").textContent = crewWon ? "Every crew member made it out. The cash is yours." : "The police stopped the escape and secured the vault.";
   const replayButton = document.getElementById("play-again");
   replayButton.disabled = crewChoices.mode === "multiplayer" && !isRoomHost;
-  replayButton.textContent = replayButton.disabled ? "Waiting for host" : "Play again ↗";
+  replayButton.innerHTML = replayButton.disabled ? "Waiting for host" : 'Play again <span class="button-arrow" aria-hidden="true">↗</span>';
   playScreen.hidden = true;
   document.getElementById("victory-screen").hidden = false;
   document.getElementById("play-again").focus();
@@ -537,20 +624,38 @@ function makeComputerMove() {
   const choice = options[Math.floor(Math.random() * options.length)]; movePiece(choice.piece, side, choice.move);
 }
 function manhattan(a, b) { return Math.abs(a.row - b.row) + Math.abs(a.col - b.col); }
+function pathDistance(from, to) {
+  const seen = new Set([from.row + "," + from.col]);
+  let frontier = [{ row: from.row, col: from.col }], steps = 0;
+  while (frontier.length) {
+    const next = [];
+    for (const cur of frontier) {
+      if (cur.row === to.row && cur.col === to.col) return steps;
+      for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        const n = { row: cur.row + dr, col: cur.col + dc }, key = n.row + "," + n.col;
+        if (!insideBoard(n.row, n.col) || seen.has(key) || blocked(cur, n)) continue;
+        seen.add(key); next.push(n);
+      }
+    }
+    frontier = next; steps += 1;
+  }
+  return manhattan(from, to) + 1000;
+}
 function computerMoveScore(candidate, side) {
   const { piece, move } = candidate, target = pieceAt(move.row, move.col);
   if (side === "crew") {
     const hatchCell = boardState.hatchPositions[boardState.hatchIndex];
     const goal = piece.carrying || !boardState.cash.available ? hatchCell : boardState.cash;
-    return (target?.side === "police" ? 100 : 0) + manhattan(move, goal);
+    return (target?.side === "police" ? 100 : 0) + pathDistance(move, goal);
   }
   const crew = sidePieces("crew");
-  const nearest = crew.sort((a, b) => manhattan(a, piece) - manhattan(b, piece))[0];
-  return (target?.side === "crew" ? -100 : 0) + (nearest ? manhattan(move, nearest) : 0);
+  const nearest = [...crew].sort((a, b) => manhattan(a, piece) - manhattan(b, piece))[0];
+  return (target?.side === "crew" ? -100 : 0) + (nearest ? pathDistance(move, nearest) : 0);
 }
 function startOperation() {
   clearComputerTimer();
   document.getElementById("victory-screen").hidden = true;
+  consecutiveSkips = 0;
   boardState = freshBoardState();
   document.getElementById("live-board").setAttribute("aria-label", `${boardState.size} by ${boardState.size} interactive heist board`);
   playScreen.classList.remove("game-over"); setGameMessage("Crew team phase: each crew member takes one action.");
@@ -575,12 +680,7 @@ document.getElementById("victory-home").addEventListener("click", goHome);
 
 function goHome() {
   clearComputerTimer();
-  if (activeRoomChannel && supabaseClient) {
-    supabaseClient.removeChannel(activeRoomChannel);
-    activeRoomChannel = null;
-  }
-  crewPlayerSelect.disabled = false;
-  policePlayerSelect.disabled = false;
+  leaveRoom();
   [crewScreen, lobbyScreen, gameScreen, playScreen, document.getElementById("victory-screen")].forEach((screen) => { screen.hidden = true; });
   landingScreen.hidden = false; window.scrollTo(0, 0); playButton.focus();
 }

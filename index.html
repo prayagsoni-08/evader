@@ -6,26 +6,30 @@
   <meta name="theme-color" content="#071b20">
   <meta name="description" content="Evader: The Cash Heist — assemble your crew and make your escape.">
   <title>Evader: The Cash Heist</title>
-  <link rel="preload" as="image" href="assets/money-heist-poster.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
+  <link rel="preload" as="image" href="assets/crew-background.jpg" media="(min-width: 46.01rem)">
+  <link rel="preload" as="image" href="assets/money-heist-poster.jpg" media="(max-width: 46rem)">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
   <script src="supabase-config.js" defer></script>
   <script src="script.js" defer></script>
 </head>
 <body>
+  <button class="sound-toggle" id="sound-toggle" type="button" aria-label="Turn sound on" aria-pressed="false" title="Sound off">
+        <svg class="sound-icon sound-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m17 9 5 6m0-6-5 6"/></svg>
+        <svg class="sound-icon sound-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13"/></svg>
+        <span class="sr-only">Sound</span>
+      </button>
   <main class="landing" aria-labelledby="page-title">
     <div class="backdrop" aria-hidden="true"></div>
     <div class="shade" aria-hidden="true"></div>
 
     <header class="topbar">
-      <a class="wordmark" href="#home" aria-label="Evader: The Cash Heist home">
+      <a class="wordmark wordmark-hero" href="#home" aria-label="Evader: The Cash Heist home">
         <span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span>
       </a>
-      <button class="sound-toggle" id="sound-toggle" type="button" aria-label="Turn sound on" aria-pressed="false" title="Sound off">
-        <svg class="sound-icon sound-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m17 9 5 6m0-6-5 6"/></svg>
-        <svg class="sound-icon sound-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13"/></svg>
-        <span class="sr-only">Sound</span>
-      </button>
     </header>
 
     <section class="hero" id="home">
@@ -174,7 +178,7 @@
           <span class="grid-size" id="live-grid-size">09 <i>×</i> 09</span>
         </div>
         <div class="game-board-frame live-frame">
-          <div class="live-board" id="live-board" role="grid" aria-label="Interactive 9 by 9 heist board"></div>
+          <div class="live-board" id="live-board" role="group" aria-label="Interactive 9 by 9 heist board"></div>
         </div>
         <p class="live-instruction" id="live-instruction">Select a piece, then choose a glowing square to move.</p>
       </section>
@@ -204,7 +208,7 @@
       <a class="wordmark" href="#home" aria-label="Evader: The Cash Heist"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
       <span class="operation-label">OPERATION 01 <i>/</i> RESOLUTION</span>
     </header>
-    <main class="victory-content">
+    <div class="victory-content">
       <p class="panel-kicker"><span></span> OPERATION COMPLETE</p>
       <h1 id="victory-title">THE HEIST<br><span>SUCCEEDED</span></h1>
       <p id="victory-copy">The crew made it out with the cash.</p>
@@ -212,7 +216,7 @@
         <button class="button button-play" id="play-again" type="button">Play again <span class="button-arrow" aria-hidden="true">↗</span></button>
         <button class="button button-about" id="victory-home" type="button">Main menu</button>
       </div>
-    </main>
+    </div>
   </section>
   <dialog class="about-dialog" id="about-dialog" aria-labelledby="about-title">
     <button class="dialog-close" id="close-about" type="button" aria-label="Close About">×</button>
