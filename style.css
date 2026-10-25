@@ -753,3 +753,24 @@ html[data-sound="on"] .sound-toggle { border-color: var(--red); color: var(--red
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- Name / mode / room flow ---------- */
+.field-label { display: block; margin: 1.25rem 0 0.5rem; color: var(--muted); font-family: var(--font-display); font-size: 1rem; font-weight: 700; letter-spacing: 0.16em; }
+.text-input { box-sizing: border-box; width: 100%; max-width: 22rem; padding: 0.7rem 1rem; border: 2px solid var(--line-strong); border-radius: 0; background: rgba(5, 19, 23, 0.55); color: var(--paper); font-family: var(--font-display); font-size: 1.4rem; font-weight: 800; letter-spacing: 0.08em; }
+.text-input:focus { outline: none; border-color: var(--red); }
+.flow-buttons { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
+.crew-actions { margin-top: 1.75rem; }
+.room-list { display: grid; gap: 0.5rem; max-height: 14rem; margin: 0 0 1rem; padding: 0; overflow-y: auto; list-style: none; }
+.room-row { display: flex; justify-content: space-between; gap: 1rem; width: 100%; max-width: 26rem; padding: 0.7rem 1rem; border: 2px solid var(--line-strong); background: rgba(5, 19, 23, 0.55); color: var(--paper); font-family: var(--font-display); font-size: 1.1rem; font-weight: 800; letter-spacing: 0.1em; text-align: left; }
+.room-row:hover, .room-row[aria-pressed="true"] { border-color: var(--red); }
+.room-empty { color: var(--muted); }
+.team-split { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+.team-col { display: flex; flex-direction: column; gap: 0.75rem; padding: 1.25rem; border: 2px solid var(--line-strong); background: rgba(10, 35, 41, 0.85); }
+.team-col:first-child { border-color: var(--red); }
+.team-col h2 { font-size: 2rem; }
+.team-col small { color: var(--muted); font-size: 1rem; letter-spacing: 0.1em; }
+.slot-list { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.slot { padding: 0.6rem 0.8rem; border: 1px dashed var(--line-strong); color: var(--muted); font-weight: 600; }
+.slot.filled { border-style: solid; border-color: var(--paper); color: var(--paper); }
+.lobby-start { margin-top: 0.5rem; }
+@media (max-width: 46rem) { .team-split { grid-template-columns: 1fr; } }

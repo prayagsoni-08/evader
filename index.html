@@ -52,96 +52,108 @@
   <section class="crew-screen" id="crew-screen" aria-labelledby="crew-title" hidden>
     <section class="crew-panel">
       <header class="crew-topbar">
-        <a class="wordmark" href="#home" id="back-to-home" aria-label="Back to home">
-          <span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span>
-        </a>
+        <a class="back-link" href="#home" id="back-to-home" aria-label="Back to home"><span aria-hidden="true">←</span> HOME</a>
+        <a class="wordmark" href="#home" aria-label="Home"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
       </header>
       <div class="crew-content">
-        <h2 id="crew-title">CHOOSE YOUR<br><span>SIDE</span></h2>
-
-        <fieldset class="choice-group" aria-label="Choose your side">
-          <legend>YOUR SIDE</legend>
-          <div class="choice-grid">
-            <button class="choice-card" type="button" data-choice="role" data-value="crew" aria-pressed="false">
-              <span class="choice-icon" aria-hidden="true">◈</span>
-              <span class="choice-title">HEIST CREW</span>
-            </button>
-            <button class="choice-card" type="button" data-choice="role" data-value="police" aria-pressed="false">
-              <span class="choice-icon" aria-hidden="true">✦</span>
-              <span class="choice-title">POLICE</span>
-            </button>
-          </div>
-        </fieldset>
-
-        <fieldset class="choice-group mode-group" aria-label="Choose a game mode">
-          <legend>GAME MODE</legend>
-          <div class="mode-grid">
-            <button class="mode-card" type="button" data-choice="mode" data-value="single-player" aria-pressed="false">
-              <span class="mode-title">SINGLE PLAYER</span>
-              <span class="mode-arrow" aria-hidden="true">↗</span>
-            </button>
-            <button class="mode-card" type="button" data-choice="mode" data-value="multiplayer" aria-pressed="false">
-              <span class="mode-title">MULTIPLAYER</span>
-              <span class="mode-arrow" aria-hidden="true">↗</span>
-            </button>
-          </div>
-        </fieldset>
-
-        <div class="crew-actions">
-          <button class="button button-play continue-button" id="continue-button" type="button" disabled>Continue <span class="button-arrow" aria-hidden="true">↗</span></button>
-        </div>
-        <p class="crew-status" id="crew-status" role="status" aria-live="polite"></p>
+        <h2 id="crew-title">WHO'S<br><span>PLAYING?</span></h2>
+        <label class="field-label" for="player-name">PLAYER NAME</label>
+        <input id="player-name" class="text-input" type="text" maxlength="16" autocomplete="nickname" placeholder="Enter your name">
+        <div class="crew-actions"><button class="button button-play" id="continue-button" type="button" disabled>Continue <span class="button-arrow" aria-hidden="true">↗</span></button></div>
+        <p class="crew-status" id="crew-status" role="status" aria-live="polite">Use 2–16 letters or numbers. Your name is saved on this device.</p>
       </div>
     </section>
-  
+  </section>
+  <section class="crew-screen" id="mode-screen" hidden>
+    <section class="crew-panel">
+      <header class="crew-topbar">
+        <button class="back-link" type="button" data-back="crew-screen"><span aria-hidden="true">←</span> BACK</button>
+        <a class="wordmark" href="#home" aria-label="Back to home"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
+      </header>
+      <div class="crew-content">
+        <h2>CHOOSE<br><span>MODE</span></h2>
+        <div class="flow-buttons">
+          <button class="button button-play" id="mode-single" type="button">Single player</button>
+          <button class="button button-about" id="mode-create" type="button">Create room</button>
+          <button class="button button-about" id="mode-join" type="button">Join room</button>
+        </div>
+      </div>
     </section>
+  </section>
+  <section class="crew-screen" id="side-screen" hidden>
+    <section class="crew-panel">
+      <header class="crew-topbar">
+        <button class="back-link" type="button" data-back="mode-screen"><span aria-hidden="true">←</span> BACK</button>
+        <a class="wordmark" href="#home" aria-label="Back to home"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
+      </header>
+      <div class="crew-content">
+        <h2>CHOOSE YOUR<br><span>SIDE</span></h2>
+        <div class="choice-grid">
+          <button class="choice-card" type="button" data-choice="role" data-value="crew" aria-pressed="false"><span class="choice-icon" aria-hidden="true">◈</span><span class="choice-title">HEIST CREW</span></button>
+          <button class="choice-card" type="button" data-choice="role" data-value="police" aria-pressed="false"><span class="choice-icon" aria-hidden="true">✦</span><span class="choice-title">POLICE</span></button>
+        </div>
+        <div class="crew-actions"><button class="button button-play" id="side-start" type="button" disabled>Start <span class="button-arrow" aria-hidden="true">↗</span></button></div>
+      </div>
+    </section>
+  </section>
+  <section class="crew-screen" id="create-screen" hidden>
+    <section class="crew-panel">
+      <header class="crew-topbar">
+        <button class="back-link" type="button" data-back="mode-screen"><span aria-hidden="true">←</span> BACK</button>
+        <a class="wordmark" href="#home" aria-label="Back to home"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
+      </header>
+      <div class="crew-content">
+        <h2>CREATE<br><span>ROOM</span></h2>
+        <div class="room-roster">
+          <label class="room-size-label" for="crew-player-count">HEIST CREW (n)
+            <select id="crew-player-count" class="room-size-select"><option>1</option><option>2</option><option selected>3</option></select></label>
+          <label class="room-size-label" for="police-player-count">POLICE (m)
+            <select id="police-player-count" class="room-size-select"><option>1</option><option>2</option><option selected>3</option></select></label>
+        </div>
+        <label class="field-label" for="room-password">PASSWORD (OPTIONAL)</label>
+        <input id="room-password" class="text-input" type="password" maxlength="32" autocomplete="new-password" placeholder="Leave empty for an open room">
+        <div class="crew-actions"><button class="button button-play" id="create-room-confirm" type="button">Create room</button></div>
+        <p class="crew-status" id="create-status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+  </section>
+  <section class="crew-screen" id="join-screen" hidden>
+    <section class="crew-panel">
+      <header class="crew-topbar">
+        <button class="back-link" type="button" data-back="mode-screen"><span aria-hidden="true">←</span> BACK</button>
+        <a class="wordmark" href="#home" aria-label="Back to home"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
+      </header>
+      <div class="crew-content">
+        <h2>JOIN<br><span>ROOM</span></h2>
+        <label class="field-label" for="room-search">SEARCH BY CODE</label>
+        <input id="room-search" class="text-input" type="text" maxlength="5" autocomplete="off" placeholder="ABCDE">
+        <p class="field-label">LIVE ROOMS</p>
+        <ul class="room-list" id="live-rooms"></ul>
+        <div class="join-selected" id="join-selected" hidden>
+          <p class="field-label" id="join-selected-label"></p>
+          <input id="join-password" class="text-input" type="password" maxlength="32" autocomplete="off" placeholder="Room password" hidden>
+          <div class="crew-actions"><button class="button button-play" id="join-room-confirm" type="button">Join room</button></div>
+        </div>
+        <p class="crew-status" id="join-status" role="status" aria-live="polite">Connecting to live rooms…</p>
+      </div>
+    </section>
+  </section>
   <section class="lobby-screen" id="lobby-screen" aria-labelledby="lobby-title" hidden>
     <header class="lobby-topbar">
-      <button class="back-link" id="back-to-setup" type="button"><span aria-hidden="true">←</span> SETUP</button>
+      <button class="back-link" id="back-to-setup" type="button"><span aria-hidden="true">←</span> LEAVE</button>
       <a class="wordmark" href="#home" aria-label="Evader: The Cash Heist"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
       <span class="operation-label">MULTIPLAYER <i>/</i> LOBBY</span>
     </header>
     <div class="lobby-content">
-      <p class="panel-kicker"><span></span> BRING YOUR TEAM TOGETHER</p>
-      <h1 id="lobby-title">JOIN OR<br><span>CREATE ROOM</span></h1>
-      <div class="room-roster">
-        <label class="room-size-label" for="crew-player-count">HEIST CREW PLAYERS
-          <select id="crew-player-count" class="room-size-select">
-            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-          </select>
-        </label>
-        <label class="room-size-label" for="police-player-count">POLICE PLAYERS
-          <select id="police-player-count" class="room-size-select">
-            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-          </select>
-        </label>
-        <p class="room-total">TOTAL PLAYERS <strong id="total-player-count">2</strong></p>
+      <p class="panel-kicker"><span></span> ROOM CODE</p>
+      <h1 id="lobby-title"><span id="created-room-code">-----</span></h1>
+      <div class="team-split">
+        <section class="team-col"><h2>HEIST CREW <small id="crew-slot-count"></small></h2><ul class="slot-list" id="crew-slots"></ul><button class="button button-about" id="join-crew-side" type="button">Join crew</button></section>
+        <section class="team-col"><h2>POLICE <small id="police-slot-count"></small></h2><ul class="slot-list" id="police-slots"></ul><button class="button button-about" id="join-police-side" type="button">Join police</button></section>
       </div>
-      <div class="room-actions">
-        <section class="room-action-card">
-          <span class="room-action-icon" aria-hidden="true">＋</span>
-          <h2>Create a room</h2>
-          <p>Start a room and share its code with your team.</p>
-          <button class="button button-play" id="create-room" type="button">Create room</button>
-        </section>
-        <section class="room-action-card">
-          <span class="room-action-icon" aria-hidden="true">↗</span>
-          <h2>Join a room</h2>
-          <p>Enter the four-letter code from your host.</p>
-          <form id="join-room-form">
-            <label class="sr-only" for="room-code">Room code</label>
-            <input id="room-code" class="room-code-input" type="text" inputmode="text" maxlength="4" minlength="4" autocomplete="off" placeholder="ABCD" aria-describedby="room-status">
-            <button class="button button-about" id="join-room" type="submit">Join room</button>
-          </form>
-        </section>
-      </div>
-      <div class="room-created" id="room-created" hidden>
-        <span class="room-created-label">ROOM CODE</span>
-        <strong id="created-room-code">----</strong>
-        <button class="button button-play" id="start-room" type="button" disabled>Start game</button>
-      </div>
+      <div class="lobby-start"><button class="button button-play" id="start-room" type="button" disabled>Start game</button></div>
       <p class="room-player-status" id="room-player-status" role="status" aria-live="polite"></p>
-      <p class="room-status" id="room-status" role="status" aria-live="polite">Connect to an online room to share this code with your team.</p>
+      <p class="room-status" id="room-status" role="status" aria-live="polite"></p>
     </div>
   </section>
   <section class="game-screen" id="game-screen" aria-labelledby="selected-side-title" hidden>

@@ -12,10 +12,7 @@ const gameStatus = document.getElementById("game-status");
 const playScreen = document.getElementById("play-screen");
 const liveBoard = document.getElementById("live-board");
 const roomStatus = document.getElementById("room-status");
-const roomCreated = document.getElementById("room-created");
 const crewChoices = { role: null, mode: null };
-const crewPlayerSelect = document.getElementById("crew-player-count");
-const policePlayerSelect = document.getElementById("police-player-count");
 let selectedBoardSize = 9;
 let selectedCrewCount = 3;
 let selectedPoliceCount = 3;
@@ -85,53 +82,68 @@ document.getElementById("done-about").addEventListener("click", () => aboutDialo
 aboutDialog.addEventListener("click", (event) => { if (event.target === aboutDialog) aboutDialog.close(); });
 aboutDialog.addEventListener("close", () => document.getElementById("about-button").focus());
 
-playButton.addEventListener("click", () => {
-  landingScreen.hidden = true; crewScreen.hidden = false; window.scrollTo(0, 0);
-  document.getElementById("back-to-home").focus();
-});
-document.getElementById("back-to-home").addEventListener("click", (event) => {
-  event.preventDefault(); crewScreen.hidden = true; landingScreen.hidden = false;
-  window.scrollTo(0, 0); playButton.focus();
-});
-document.querySelectorAll("[data-choice]").forEach((button) => button.addEventListener("click", () => {
-  const group = button.dataset.choice;
-  crewChoices[group] = button.dataset.value;
-  document.querySelectorAll(`[data-choice="${group}"]`).forEach((option) => option.setAttribute("aria-pressed", String(option === button)));
-  continueButton.disabled = !(crewChoices.role && crewChoices.mode);
-  crewStatus.textContent = continueButton.disabled ? (crewChoices.role ? "Choose a game mode to finish setting up your team." : "Choose your side to finish setting up your team.") : "Side and game mode selected. You’re ready to continue.";
-}));
+// ---------- Screen helper ----------
+const modeScreen = document.getElementById("mode-screen");
+const sideScreen = document.getElementById("side-screen");
+const createScreen = document.getElementById("create-screen");
+const joinScreen = document.getElementById("join-screen");
+const ALL_SCREENS = [crewScreen, modeScreen, sideScreen, createScreen, joinScreen, lobbyScreen, gameScreen, playScreen, document.getElementById("victory-screen")];
+function showScreen(target) {
+  ALL_SCREENS.forEach((screen) => { screen.hidden = screen !== target; });
+  landingScreen.hidden = target !== landingScreen;
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll("[data-back]").forEach((btn) => btn.addEventListener("click", () => showScreen(document.getElementById(btn.dataset.back))));
 
+// ---------- Page 2: player name ----------
+const nameInput = document.getElementById("player-name");
+let playerName = "";
+try { playerName = localStorage.getItem("evader-player-name") || ""; } catch { /* storage unavailable */ }
+function cleanName(value) { return String(value || "").replace(/[^\p{L}\p{N} _.-]/gu, "").trim().slice(0, 16); }
+nameInput.value = cleanName(playerName);
+function syncName() { continueButton.disabled = cleanName(nameInput.value).length < 2; }
+nameInput.addEventListener("input", syncName);
+nameInput.addEventListener("keydown", (event) => { if (event.key === "Enter") continueButton.click(); });
+syncName();
+playButton.addEventListener("click", () => { showScreen(crewScreen); nameInput.focus(); });
+document.getElementById("back-to-home").addEventListener("click", (event) => { event.preventDefault(); showScreen(landingScreen); playButton.focus(); });
 continueButton.addEventListener("click", () => {
   if (continueButton.disabled) return;
-  crewScreen.hidden = true;
-  window.scrollTo(0, 0);
-  if (crewChoices.mode === "multiplayer") {
-    lobbyScreen.hidden = false;
-    roomStatus.textContent = "Create a room or enter your team’s four-letter room code.";
-    document.getElementById("create-room").focus();
-    return;
-  }
-  showBriefing();
+  playerName = cleanName(nameInput.value);
+  nameInput.value = playerName;
+  try { localStorage.setItem("evader-player-name", playerName); } catch { /* storage unavailable */ }
+  showScreen(modeScreen);
 });
-function updateRoomPlayerTotal() {
-  const total = Number(crewPlayerSelect.value) + Number(policePlayerSelect.value);
-  document.getElementById("total-player-count").textContent = String(total);
-}
-crewPlayerSelect.addEventListener("change", updateRoomPlayerTotal);
-policePlayerSelect.addEventListener("change", updateRoomPlayerTotal);
-updateRoomPlayerTotal();
+
+// ---------- Page 3: mode ----------
+document.getElementById("mode-single").addEventListener("click", () => {
+  crewChoices.mode = "single-player"; crewChoices.role = null;
+  document.getElementById("side-start").disabled = true;
+  document.querySelectorAll('[data-choice="role"]').forEach((o) => o.setAttribute("aria-pressed", "false"));
+  showScreen(sideScreen);
+});
+document.querySelectorAll('[data-choice="role"]').forEach((button) => button.addEventListener("click", () => {
+  crewChoices.role = button.dataset.value;
+  document.querySelectorAll('[data-choice="role"]').forEach((o) => o.setAttribute("aria-pressed", String(o === button)));
+  document.getElementById("side-start").disabled = false;
+}));
+document.getElementById("side-start").addEventListener("click", () => { if (crewChoices.role) showBriefing(); });
+document.getElementById("mode-create").addEventListener("click", () => { crewChoices.mode = "multiplayer"; showScreen(createScreen); });
+document.getElementById("mode-join").addEventListener("click", () => {
+  crewChoices.mode = "multiplayer"; showScreen(joinScreen);
+  document.getElementById("join-status").textContent = "Connecting to live rooms…";
+  openLobby().then(() => renderLiveRooms()).catch((error) => { document.getElementById("join-status").textContent = error.message; });
+});
+
 function boardSizeForSetup() {
-  if (crewChoices.mode !== "multiplayer") { selectedCrewCount = 1; selectedPoliceCount = 1; return 9; }
-  const crewCount = Number(crewPlayerSelect.value) || 1;
-  const policeCount = Number(policePlayerSelect.value) || 1;
-  selectedCrewCount = crewCount;
-  selectedPoliceCount = policeCount;
-  return 3 * (crewCount + policeCount) + 3; // total 2 -> 9x9, total 4 -> 15x15
+  if (crewChoices.mode !== "multiplayer" || !roomConfig) { selectedCrewCount = 1; selectedPoliceCount = 1; return 9; }
+  selectedCrewCount = roomConfig.crewCount;
+  selectedPoliceCount = roomConfig.policeCount;
+  return 3 * (selectedCrewCount + selectedPoliceCount) + 3; // total 2 -> 9x9, total 4 -> 15x15
 }
 function showBriefing() {
   selectedBoardSize = boardSizeForSetup();
-  lobbyScreen.hidden = true;
-  gameScreen.hidden = false;
+  showScreen(gameScreen);
   document.getElementById("selected-side-title").innerHTML = crewChoices.role === "crew" ? "HEIST<br><span>CREW</span>" : "THE<br><span>POLICE</span>";
   document.getElementById("selected-mode").textContent = crewChoices.mode === "single-player" ? "SINGLE PLAYER" : `ONLINE ROOM ${currentRoomCode} · ${selectedCrewCount} CREW + ${selectedPoliceCount} POLICE · ${selectedBoardSize}×${selectedBoardSize}`;
   document.getElementById("objective-copy").textContent = "The crew moves as a team, gathers the cash, and must get every member out. Police can catch crew or barricade a passage.";
@@ -144,155 +156,232 @@ function showBriefing() {
   beginButton.innerHTML = crewChoices.mode === "multiplayer" && !isRoomHost ? "Waiting for host" : 'Begin operation <span class="button-arrow" aria-hidden="true">↗</span>';
   document.getElementById("back-to-crew").focus();
 }
-document.getElementById("back-to-setup").addEventListener("click", () => {
-  leaveRoom();
-  lobbyScreen.hidden = true; crewScreen.hidden = false; window.scrollTo(0, 0); continueButton.focus();
-});
-document.getElementById("create-room").addEventListener("click", async () => {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const code = Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
-  currentRoomCode = code;
-  document.getElementById("created-room-code").textContent = code;
-  roomCreated.hidden = false;
-  isRoomHost = true;
-  crewPlayerSelect.disabled = false;
-  policePlayerSelect.disabled = false;
-  roomConfig = { crewCount: Number(crewPlayerSelect.value), policeCount: Number(policePlayerSelect.value) };
-  document.getElementById("start-room").textContent = "Start game";
-  document.getElementById("start-room").disabled = true;
-  roomStatus.textContent = "Connecting to the online room…";
-  try {
-    await connectToRoom(code, true);
-    crewPlayerSelect.disabled = true;
-    policePlayerSelect.disabled = true;
-    roomStatus.textContent = `Room ${code} is online. Share the code with your players.`;
-    document.getElementById("start-room").focus();
-  } catch (error) { await leaveRoom(); roomStatus.textContent = error.message; }
-});
-document.getElementById("join-room-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const code = document.getElementById("room-code").value.trim().toUpperCase();
-  document.getElementById("room-code").value = code;
-  if (!/^[A-Z0-9]{4}$/.test(code)) {
-    roomStatus.textContent = "Enter a four-character room code.";
-    document.getElementById("room-code").focus();
-    return;
-  }
-  currentRoomCode = code;
-  isRoomHost = false;
-  roomCreated.hidden = false;
-  document.getElementById("created-room-code").textContent = code;
-  document.getElementById("start-room").textContent = "Waiting for host";
-  document.getElementById("start-room").disabled = true;
-  roomStatus.textContent = `Connecting to room ${code}…`;
-  try {
-    await connectToRoom(code, false);
-    roomStatus.textContent = `Connected to room ${code}. Waiting for the host to start.`;
-    document.getElementById("start-room").focus();
-    window.setTimeout(() => {
-      const others = currentRoomPlayers().filter((player) => player.playerId !== roomPlayerId);
-      if (!others.length) roomStatus.textContent = `No active host found for ${code}. Check the code and make sure the host stays online.`;
-    }, 2500);
-  } catch (error) { await leaveRoom(); roomStatus.textContent = error.message; }
-});
-document.getElementById("start-room").addEventListener("click", async () => {
-  if (!isRoomHost || document.getElementById("start-room").disabled) return;
-  try { await broadcastRoom("room-start", getRoomConfig()); }
-  catch (error) { roomStatus.textContent = error.message; return; }
-  showBriefing();
-});
 
-function resetRoomUI() {
-  currentRoomCode = "";
-  isRoomHost = false;
-  roomConfig = null;
-  roomCreated.hidden = true;
-  document.getElementById("created-room-code").textContent = "----";
-  const startButton = document.getElementById("start-room");
-  startButton.textContent = "Start game";
-  startButton.disabled = true;
-  document.getElementById("room-player-status").textContent = "";
-  crewPlayerSelect.disabled = false;
-  policePlayerSelect.disabled = false;
+// ---------- Online rooms ----------
+// Rooms are listed on a shared "evader-lobby" presence channel. A password is never sent in the clear:
+// the host publishes only a salted check-hash, and the game channel name includes a second hash that
+// only people who know the password can compute.
+const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+let lobbyChannel = null, lobbyReady = null, hostRoomInfo = null, roomChannelKey = "", roomJoinedAt = "", selectedRoom = null;
+
+async function sha(text) {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(bytes), (x) => x.toString(16).padStart(2, "0")).join("");
 }
-async function leaveRoom() {
-  const channel = activeRoomChannel;
-  activeRoomChannel = null;
-  if (channel && supabaseClient) { try { await supabaseClient.removeChannel(channel); } catch { /* already closed */ } }
-  resetRoomUI();
+function randomString(length, alphabet) {
+  const values = new Uint32Array(length); crypto.getRandomValues(values);
+  return Array.from(values, (n) => alphabet[n % alphabet.length]).join("");
 }
-function getRoomConfig() {
-  return {
-    crewCount: Number(crewPlayerSelect.value),
-    policeCount: Number(policePlayerSelect.value),
-    totalPlayers: Number(crewPlayerSelect.value) + Number(policePlayerSelect.value)
-  };
-}
-function applyRoomConfig(config) {
-  if (!config || !Number.isInteger(config.crewCount) || !Number.isInteger(config.policeCount)) return;
-  roomConfig = config;
-  crewPlayerSelect.value = String(config.crewCount);
-  policePlayerSelect.value = String(config.policeCount);
-  selectedCrewCount = config.crewCount;
-  selectedPoliceCount = config.policeCount;
-  selectedBoardSize = 3 * (selectedCrewCount + selectedPoliceCount) + 3;
-  crewPlayerSelect.disabled = !isRoomHost;
-  policePlayerSelect.disabled = !isRoomHost;
-  updateRoomPlayerTotal();
-}
-function currentRoomPlayers() {
-  if (!activeRoomChannel) return [];
-  return Object.values(activeRoomChannel.presenceState()).flat();
-}
-async function broadcastRoom(event, payload) {
-  if (!activeRoomChannel) return;
-  const result = await activeRoomChannel.send({ type: "broadcast", event, payload });
-  if (result !== "ok") throw new Error("Could not send an update to the room. Check the connection and try again.");
-}
-function updateRoomPresence() {
-  const players = currentRoomPlayers();
-  const crewPlayers = players.filter((player) => player.role === "crew").length;
-  const policePlayers = players.filter((player) => player.role === "police").length;
-  const expected = roomConfig?.totalPlayers || getRoomConfig().totalPlayers;
-  document.getElementById("room-player-status").textContent = `${players.length}/${expected} connected · ${crewPlayers}/${roomConfig?.crewCount || getRoomConfig().crewCount} crew · ${policePlayers}/${roomConfig?.policeCount || getRoomConfig().policeCount} police`;
-  const full = players.length === expected && crewPlayers === (roomConfig?.crewCount || getRoomConfig().crewCount) && policePlayers === (roomConfig?.policeCount || getRoomConfig().policeCount);
-  const startButton = document.getElementById("start-room");
-  if (isRoomHost) {
-    startButton.disabled = !full;
-    startButton.title = full ? "Start the match" : "Wait for all crew and police players to connect";
-    if (full) roomStatus.textContent = "All players are connected. The host can start the match.";
-  }
-  if (isRoomHost) broadcastRoom("room-config", getRoomConfig()).catch((error) => { roomStatus.textContent = error.message; });
-}
-async function connectToRoom(code, host) {
+function getClient() {
   const config = window.EVADER_SUPABASE_CONFIG;
   if (!config || !config.url || config.url.includes("YOUR_PROJECT_REF") || !config.publishableKey || config.publishableKey.includes("REPLACE_ME")) {
     throw new Error("Add your Supabase Project URL and publishable key to supabase-config.js first.");
   }
   if (!window.supabase?.createClient) throw new Error("Supabase failed to load. Check your internet connection and reload.");
   if (!supabaseClient) supabaseClient = window.supabase.createClient(config.url, config.publishableKey);
-  if (activeRoomChannel) { await supabaseClient.removeChannel(activeRoomChannel); activeRoomChannel = null; }
-  isRoomHost = host;
-  if (host) roomConfig = getRoomConfig();
-  const channel = supabaseClient.channel(`evader-room-${code}`, { config: { presence: { key: roomPlayerId } } });
+  return supabaseClient;
+}
+function openLobby() {
+  if (lobbyReady) return lobbyReady;
+  const channel = getClient().channel("evader-lobby", { config: { presence: { key: roomPlayerId } } });
+  lobbyChannel = channel;
+  channel.on("presence", { event: "sync" }, () => renderLiveRooms());
+  lobbyReady = new Promise((resolve, reject) => {
+    const fail = (message) => { window.clearTimeout(timer); lobbyReady = null; lobbyChannel = null; reject(new Error(message)); };
+    const timer = window.setTimeout(() => fail("Could not reach the room lobby. Check the Supabase URL and key."), 12000);
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") { window.clearTimeout(timer); resolve(channel); }
+      else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) fail(`Lobby connection failed (${status}). Check Supabase Realtime is enabled.`);
+    });
+  });
+  return lobbyReady;
+}
+function liveRooms() {
+  if (!lobbyChannel) return [];
+  const seen = new Set();
+  return Object.values(lobbyChannel.presenceState()).flat().map((p) => p.room).filter((r) => {
+    if (!r || !/^[A-Z0-9]{5}$/.test(r.code) || seen.has(r.code)) return false;
+    if (![r.crew, r.police].every((n) => Number.isInteger(n) && n >= 1 && n <= 3)) return false;
+    seen.add(r.code); return true;
+  });
+}
+function announceRoom() {
+  if (!lobbyChannel || !hostRoomInfo) return;
+  lobbyChannel.track({ room: { ...hostRoomInfo, players: currentRoomPlayers().length } }).catch(() => {});
+}
+
+// ----- Join screen: search, live list, password -----
+function renderLiveRooms() {
+  const list = document.getElementById("live-rooms");
+  const query = document.getElementById("room-search").value.trim().toUpperCase();
+  const rooms = liveRooms().filter((r) => !query || r.code.startsWith(query));
+  list.replaceChildren();
+  rooms.forEach((room) => {
+    const li = document.createElement("li"); const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "room-row"; btn.setAttribute("aria-pressed", String(selectedRoom?.code === room.code));
+    const left = document.createElement("span"); left.textContent = `${room.code}${room.hasPw ? " 🔒" : ""}`;
+    const right = document.createElement("span"); right.textContent = `${room.crew} CREW + ${room.police} POLICE · ${Math.min(Number(room.players) || 0, 6)}/${room.crew + room.police}`;
+    btn.append(left, right); btn.addEventListener("click", () => selectRoom(room)); li.append(btn); list.append(li);
+  });
+  document.getElementById("join-status").textContent = rooms.length ? "Pick a room to join." : (query ? `No live room matches “${query}”.` : "No live rooms right now. Ask a host to create one.");
+}
+function selectRoom(room) {
+  selectedRoom = room;
+  document.getElementById("join-selected").hidden = false;
+  document.getElementById("join-selected-label").textContent = `ROOM ${room.code}${room.hasPw ? " · PASSWORD REQUIRED" : ""}`;
+  const pw = document.getElementById("join-password"); pw.hidden = !room.hasPw; pw.value = "";
+  renderLiveRooms();
+  (room.hasPw ? pw : document.getElementById("join-room-confirm")).focus();
+}
+document.getElementById("room-search").addEventListener("input", (event) => { event.target.value = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); renderLiveRooms(); });
+
+// ----- Create -----
+document.getElementById("create-room-confirm").addEventListener("click", async () => {
+  const status = document.getElementById("create-status");
+  const crew = Number(document.getElementById("crew-player-count").value), police = Number(document.getElementById("police-player-count").value);
+  const password = document.getElementById("room-password").value;
+  status.textContent = "Creating room…";
+  try {
+    await openLobby();
+    const taken = new Set(liveRooms().map((r) => r.code));
+    let code; do { code = randomString(5, ROOM_CODE_ALPHABET); } while (taken.has(code));
+    const room = { code, crew, police, hasPw: Boolean(password) };
+    roomChannelKey = "";
+    if (password) {
+      room.salt = randomString(16, ROOM_CODE_ALPHABET);
+      room.check = await sha(`${room.salt}:check:${password}`);
+      roomChannelKey = (await sha(`${room.salt}:chan:${password}`)).slice(0, 24);
+    }
+    hostRoomInfo = room; currentRoomCode = code; isRoomHost = true; crewChoices.role = "crew";
+    roomConfig = { crewCount: crew, policeCount: police, totalPlayers: crew + police };
+    await connectToRoom(code, true);
+    document.getElementById("room-password").value = "";
+    document.getElementById("created-room-code").textContent = code;
+    showScreen(lobbyScreen); announceRoom();
+    roomStatus.textContent = password ? "Room is password protected. Share the code and password." : "Open room. Share the code with your players.";
+  } catch (error) { await leaveRoom(); status.textContent = error.message; }
+});
+
+// ----- Join -----
+document.getElementById("join-room-confirm").addEventListener("click", async () => {
+  const status = document.getElementById("join-status"); const room = selectedRoom;
+  if (!room) { status.textContent = "Pick a room first."; return; }
+  try {
+    roomChannelKey = "";
+    if (room.hasPw) {
+      const password = document.getElementById("join-password").value;
+      if (!password) { status.textContent = "Enter the room password."; return; }
+      if (await sha(`${room.salt}:check:${password}`) !== room.check) { status.textContent = "Wrong password."; return; }
+      roomChannelKey = (await sha(`${room.salt}:chan:${password}`)).slice(0, 24);
+    }
+    status.textContent = `Joining ${room.code}…`;
+    isRoomHost = false; currentRoomCode = room.code;
+    roomConfig = { crewCount: room.crew, policeCount: room.police, totalPlayers: room.crew + room.police };
+    await connectToRoom(room.code, false);
+    document.getElementById("created-room-code").textContent = room.code;
+    document.getElementById("join-password").value = "";
+    showScreen(lobbyScreen);
+    roomStatus.textContent = "Connected. Waiting for the host to start.";
+  } catch (error) { await leaveRoom(); status.textContent = error.message; }
+});
+
+// ----- Lobby -----
+document.getElementById("back-to-setup").addEventListener("click", async () => { await leaveRoom(); showScreen(modeScreen); });
+document.getElementById("join-crew-side").addEventListener("click", () => switchSide("crew"));
+document.getElementById("join-police-side").addEventListener("click", () => switchSide("police"));
+document.getElementById("start-room").addEventListener("click", async () => {
+  if (!isRoomHost || document.getElementById("start-room").disabled) return;
+  try { await broadcastRoom("room-start", getRoomConfig()); }
+  catch (error) { roomStatus.textContent = error.message; return; }
+  showBriefing();
+});
+function trackSelf() {
+  return activeRoomChannel.track({ playerId: roomPlayerId, name: cleanName(playerName) || "Player", role: crewChoices.role, host: isRoomHost, joinedAt: roomJoinedAt });
+}
+async function switchSide(side) {
+  if (!activeRoomChannel || crewChoices.role === side) return;
+  const cap = side === "crew" ? roomConfig.crewCount : roomConfig.policeCount;
+  const taken = currentRoomPlayers().filter((p) => p.role === side && p.playerId !== roomPlayerId).length;
+  if (taken >= cap) { roomStatus.textContent = "That side is full."; return; }
+  crewChoices.role = side;
+  try { await trackSelf(); } catch { roomStatus.textContent = "Could not switch sides."; }
+}
+function resetRoomUI() {
+  currentRoomCode = ""; isRoomHost = false; roomConfig = null; hostRoomInfo = null; roomChannelKey = ""; selectedRoom = null;
+  document.getElementById("created-room-code").textContent = "-----";
+  const startButton = document.getElementById("start-room"); startButton.textContent = "Start game"; startButton.disabled = true;
+  document.getElementById("room-player-status").textContent = ""; roomStatus.textContent = "";
+  document.getElementById("join-selected").hidden = true;
+}
+async function leaveRoom() {
+  const channel = activeRoomChannel; activeRoomChannel = null;
+  if (lobbyChannel) { try { await lobbyChannel.untrack(); } catch { /* ignore */ } }
+  if (channel && supabaseClient) { try { await supabaseClient.removeChannel(channel); } catch { /* already closed */ } }
+  resetRoomUI();
+}
+function getRoomConfig() { return { crewCount: roomConfig.crewCount, policeCount: roomConfig.policeCount, totalPlayers: roomConfig.crewCount + roomConfig.policeCount }; }
+function applyRoomConfig(config) {
+  if (!config || !Number.isInteger(config.crewCount) || !Number.isInteger(config.policeCount)) return;
+  if (config.crewCount < 1 || config.crewCount > 3 || config.policeCount < 1 || config.policeCount > 3) return;
+  roomConfig = { crewCount: config.crewCount, policeCount: config.policeCount, totalPlayers: config.crewCount + config.policeCount };
+  selectedCrewCount = config.crewCount; selectedPoliceCount = config.policeCount;
+  selectedBoardSize = 3 * (selectedCrewCount + selectedPoliceCount) + 3;
+}
+function currentRoomPlayers() {
+  if (!activeRoomChannel) return [];
+  return Object.values(activeRoomChannel.presenceState()).flat();
+}
+function isFromHost(payload) { return currentRoomPlayers().some((p) => p.playerId === payload?.senderId && p.host); }
+async function broadcastRoom(event, payload) {
+  if (!activeRoomChannel) return;
+  const result = await activeRoomChannel.send({ type: "broadcast", event, payload: { ...payload, senderId: roomPlayerId } });
+  if (result !== "ok") throw new Error("Could not send an update to the room. Check the connection and try again.");
+}
+function renderSlots() {
+  const players = currentRoomPlayers().sort((a, b) => String(a.joinedAt).localeCompare(String(b.joinedAt)));
+  [["crew", roomConfig.crewCount], ["police", roomConfig.policeCount]].forEach(([side, cap]) => {
+    const list = document.getElementById(`${side}-slots`); list.replaceChildren();
+    const mine = players.filter((p) => p.role === side);
+    for (let i = 0; i < Math.max(cap, mine.length); i++) {
+      const li = document.createElement("li"), p = mine[i];
+      li.className = p ? "slot filled" : "slot";
+      li.textContent = p ? `${cleanName(p.name) || "Player"}${p.host ? " ★ HOST" : ""}${p.playerId === roomPlayerId ? " (you)" : ""}` : "Waiting for player…";
+      list.append(li);
+    }
+    document.getElementById(`${side}-slot-count`).textContent = `${mine.length}/${cap}`;
+  });
+}
+function updateRoomPresence() {
+  if (!roomConfig) return;
+  renderSlots();
+  const players = currentRoomPlayers();
+  const crewN = players.filter((p) => p.role === "crew").length, policeN = players.filter((p) => p.role === "police").length;
+  document.getElementById("room-player-status").textContent = `${players.length}/${roomConfig.totalPlayers} connected`;
+  if (isRoomHost) {
+    const full = crewN === roomConfig.crewCount && policeN === roomConfig.policeCount;
+    const startButton = document.getElementById("start-room");
+    startButton.disabled = !full;
+    startButton.title = full ? "Start the match" : "Fill every crew and police slot to start";
+    roomStatus.textContent = full ? "Everyone is in. Start the game." : "Waiting for players to fill both sides…";
+    announceRoom();
+  } else document.getElementById("start-room").textContent = "Waiting for host";
+}
+async function connectToRoom(code, host) {
+  const client = getClient();
+  if (activeRoomChannel) { await client.removeChannel(activeRoomChannel); activeRoomChannel = null; }
+  isRoomHost = host; roomJoinedAt = new Date().toISOString();
+  const channel = client.channel(`evader-room-${code}${roomChannelKey ? `-${roomChannelKey}` : ""}`, { config: { presence: { key: roomPlayerId } } });
   activeRoomChannel = channel;
   channel
     .on("presence", { event: "sync" }, () => updateRoomPresence())
-    .on("broadcast", { event: "room-config" }, ({ payload }) => { if (!isRoomHost) applyRoomConfig(payload); })
-    .on("broadcast", { event: "room-config-request" }, () => { if (isRoomHost) broadcastRoom("room-config", getRoomConfig()); })
     .on("broadcast", { event: "room-start" }, ({ payload }) => {
-      if (isRoomHost) return;
-      applyRoomConfig(payload);
-      showBriefing();
-      roomStatus.textContent = "The host opened the match briefing.";
+      if (isRoomHost || !isFromHost(payload)) return;
+      applyRoomConfig(payload); showBriefing(); roomStatus.textContent = "The host opened the match briefing.";
     })
     .on("broadcast", { event: "game-start" }, ({ payload }) => {
-      if (isRoomHost) return;
+      if (isRoomHost || !isFromHost(payload)) return;
       applyBoardSnapshot(payload.state);
-      lobbyScreen.hidden = true;
-      gameScreen.hidden = true;
-      document.getElementById("victory-screen").hidden = true;
-      playScreen.hidden = false;
+      showScreen(playScreen);
       renderLiveBoard();
     })
     .on("broadcast", { event: "game-state" }, ({ payload }) => {
@@ -307,31 +396,29 @@ async function connectToRoom(code, host) {
       if (status === "SUBSCRIBED") {
         window.clearTimeout(timeout);
         try {
-          const tracked = await channel.track({ playerId: roomPlayerId, role: crewChoices.role, joinedAt: new Date().toISOString() });
-          if (tracked !== "ok") throw new Error("Could not join the room presence channel.");
-          settled = true;
-          resolve();
-          if (!host) await broadcastRoom("room-config-request", {});
-          updateRoomPresence();
+          if (!host) { // let presence sync, then take a free slot (crew first)
+            await new Promise((r) => window.setTimeout(r, 600));
+            const players = currentRoomPlayers();
+            const crewN = players.filter((p) => p.role === "crew").length, policeN = players.filter((p) => p.role === "police").length;
+            if (!players.some((p) => p.host)) throw new Error("No active host found for this room. It may have closed.");
+            if (crewN < roomConfig.crewCount) crewChoices.role = "crew";
+            else if (policeN < roomConfig.policeCount) crewChoices.role = "police";
+            else throw new Error("This room is full.");
+          }
+          if (await trackSelf() !== "ok") throw new Error("Could not join the room.");
+          settled = true; resolve(); updateRoomPresence();
         } catch (error) { reject(error); }
       } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
         window.clearTimeout(timeout);
         if (!settled) reject(new Error(`Room connection failed (${status}). Check Supabase Realtime is enabled.`));
-        else if (activeRoomChannel === channel) {
-          const lost = "Lost connection to the room. Go back to setup and rejoin.";
-          roomStatus.textContent = lost;
-          setGameMessage(lost);
-        }
+        else if (activeRoomChannel === channel) { const lost = "Lost connection to the room. Leave and rejoin."; roomStatus.textContent = lost; setGameMessage(lost); }
       }
     });
   });
 }
 
 document.getElementById("back-to-crew").addEventListener("click", () => {
-  gameScreen.hidden = true;
-  if (crewChoices.mode === "multiplayer") lobbyScreen.hidden = false; else crewScreen.hidden = false;
-  window.scrollTo(0, 0);
-  (crewChoices.mode === "multiplayer" ? document.getElementById("create-room") : continueButton).focus();
+  if (crewChoices.mode === "multiplayer" && activeRoomChannel) showScreen(lobbyScreen); else showScreen(sideScreen);
 });
 document.getElementById("begin-operation").addEventListener("click", () => {
   if (crewChoices.mode === "multiplayer" && (!isRoomHost || !activeRoomChannel)) return;
@@ -681,7 +768,6 @@ document.getElementById("victory-home").addEventListener("click", goHome);
 function goHome() {
   clearComputerTimer();
   leaveRoom();
-  [crewScreen, lobbyScreen, gameScreen, playScreen, document.getElementById("victory-screen")].forEach((screen) => { screen.hidden = true; });
-  landingScreen.hidden = false; window.scrollTo(0, 0); playButton.focus();
+  showScreen(landingScreen); playButton.focus();
 }
 document.querySelectorAll(".lobby-topbar .wordmark, .game-topbar .wordmark, .play-topbar .wordmark").forEach((link) => link.addEventListener("click", (event) => { event.preventDefault(); goHome(); }));
