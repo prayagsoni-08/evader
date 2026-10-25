@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#071b20">
+  <meta name="description" content="Evader: The Cash Heist — assemble your crew and make your escape.">
+  <title>Evader: The Cash Heist</title>
+  <link rel="preload" as="image" href="assets/money-heist-poster.jpg">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="supabase-config.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <main class="landing" aria-labelledby="page-title">
+    <div class="backdrop" aria-hidden="true"></div>
+    <div class="shade" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="wordmark" href="#home" aria-label="Evader: The Cash Heist home">
+        <span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span>
+      </a>
+      <button class="sound-toggle" id="sound-toggle" type="button" aria-label="Turn sound on" aria-pressed="false" title="Sound off">
+        <svg class="sound-icon sound-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m17 9 5 6m0-6-5 6"/></svg>
+        <svg class="sound-icon sound-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13"/></svg>
+        <span class="sr-only">Sound</span>
+      </button>
+    </header>
+
+    <section class="hero" id="home">
+      <h1 id="page-title">EVADER:<br><span>THE CASH HEIST</span></h1>
+
+      <nav class="main-actions" aria-label="Main menu">
+        <button class="button button-play" id="play-button" type="button">
+          <span>Play</span><span class="button-arrow" aria-hidden="true">↗</span>
+        </button>
+        <button class="button button-about" id="about-button" type="button">About</button>
+      </nav>
+      <p class="edition">A GAME OF STRATEGY &amp; ESCAPE <span aria-hidden="true">•</span> 01</p>
+    </section>
+
+    <div class="bottom-mark" aria-hidden="true"><span></span> PLAN IT. TRUST THE CREW. GET OUT. <span></span></div>
+    <p class="screen-reader-status" id="status-message" role="status" aria-live="polite"></p>
+  </main>
+
+  
+  <section class="crew-screen" id="crew-screen" aria-labelledby="crew-title" hidden>
+    <section class="crew-panel">
+      <header class="crew-topbar">
+        <a class="wordmark" href="#home" id="back-to-home" aria-label="Back to home">
+          <span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span>
+        </a>
+      </header>
+      <div class="crew-content">
+        <h2 id="crew-title">CHOOSE YOUR<br><span>SIDE</span></h2>
+
+        <fieldset class="choice-group" aria-label="Choose your side">
+          <legend>YOUR SIDE</legend>
+          <div class="choice-grid">
+            <button class="choice-card" type="button" data-choice="role" data-value="crew" aria-pressed="false">
+              <span class="choice-icon" aria-hidden="true">◈</span>
+              <span class="choice-title">HEIST CREW</span>
+            </button>
+            <button class="choice-card" type="button" data-choice="role" data-value="police" aria-pressed="false">
+              <span class="choice-icon" aria-hidden="true">✦</span>
+              <span class="choice-title">POLICE</span>
+            </button>
+          </div>
+        </fieldset>
+
+        <fieldset class="choice-group mode-group" aria-label="Choose a game mode">
+          <legend>GAME MODE</legend>
+          <div class="mode-grid">
+            <button class="mode-card" type="button" data-choice="mode" data-value="single-player" aria-pressed="false">
+              <span class="mode-title">SINGLE PLAYER</span>
+              <span class="mode-arrow" aria-hidden="true">↗</span>
+            </button>
+            <button class="mode-card" type="button" data-choice="mode" data-value="multiplayer" aria-pressed="false">
+              <span class="mode-title">MULTIPLAYER</span>
+              <span class="mode-arrow" aria-hidden="true">↗</span>
+            </button>
+          </div>
+        </fieldset>
+
+        <div class="crew-actions">
+          <button class="button button-play continue-button" id="continue-button" type="button" disabled>Continue <span class="button-arrow" aria-hidden="true">↗</span></button>
+        </div>
+        <p class="crew-status" id="crew-status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+  
+    </section>
+  <section class="lobby-screen" id="lobby-screen" aria-labelledby="lobby-title" hidden>
+    <header class="lobby-topbar">
+      <button class="back-link" id="back-to-setup" type="button"><span aria-hidden="true">←</span> SETUP</button>
+      <a class="wordmark" href="#home" aria-label="Evader: The Cash Heist"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
+      <span class="operation-label">MULTIPLAYER <i>/</i> LOBBY</span>
+    </header>
+    <div class="lobby-content">
+      <p class="panel-kicker"><span></span> BRING YOUR TEAM TOGETHER</p>
+      <h1 id="lobby-title">JOIN OR<br><span>CREATE ROOM</span></h1>
+      <div class="room-roster">
+        <label class="room-size-label" for="crew-player-count">HEIST CREW PLAYERS
+          <select id="crew-player-count" class="room-size-select">
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+          </select>
+        </label>
+        <label class="room-size-label" for="police-player-count">POLICE PLAYERS
+          <select id="police-player-count" class="room-size-select">
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+          </select>
+        </label>
+        <p class="room-total">TOTAL PLAYERS <strong id="total-player-count">2</strong></p>
+      </div>
+      <div class="room-actions">
+        <section class="room-action-card">
+          <span class="room-action-icon" aria-hidden="true">＋</span>
+          <h2>Create a room</h2>
+          <p>Start a room and share its code with your team.</p>
+          <button class="button button-play" id="create-room" type="button">Create room</button>
+        </section>
+        <section class="room-action-card">
+          <span class="room-action-icon" aria-hidden="true">↗</span>
+          <h2>Join a room</h2>
+          <p>Enter the four-letter code from your host.</p>
+          <form id="join-room-form">
+            <label class="sr-only" for="room-code">Room code</label>
+            <input id="room-code" class="room-code-input" type="text" inputmode="text" maxlength="4" minlength="4" autocomplete="off" placeholder="ABCD" aria-describedby="room-status">
+            <button class="button button-about" id="join-room" type="submit">Join room</button>
+          </form>
+        </section>
+      </div>
+      <div class="room-created" id="room-created" hidden>
+        <span class="room-created-label">ROOM CODE</span>
+        <strong id="created-room-code">----</strong>
+        <button class="button button-play" id="start-room" type="button" disabled>Start game</button>
+      </div>
+      <p class="room-player-status" id="room-player-status" role="status" aria-live="polite"></p>
+      <p class="room-status" id="room-status" role="status" aria-live="polite">Connect to an online room to share this code with your team.</p>
+    </div>
+  </section>
+  <section class="game-screen" id="game-screen" aria-labelledby="selected-side-title" hidden>
+    <header class="game-topbar">
+      <button class="back-link" id="back-to-crew" type="button"><span aria-hidden="true">←</span> SETUP</button>
+      <a class="wordmark" href="#home" aria-label="Evader: The Cash Heist"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
+      <span class="operation-label">OPERATION 01 <i>/</i> THE BANK</span>
+    </header>
+
+    <div class="briefing-layout">
+      <aside class="mission-panel">
+        <p class="panel-kicker"><span></span> MISSION BRIEF</p>
+        <h2 id="selected-side-title">HEIST<br><span>CREW</span></h2>
+        <div class="mode-stamp" id="selected-mode">SINGLE PLAYER</div>
+        <div class="mission-rule"></div>
+        <h3>OBJECTIVE</h3>
+        <p class="objective-copy" id="objective-copy">Secure the cash and make it to an exit before the police close in.</p>
+        <p class="briefing-room-details" id="briefing-room-details" hidden></p>
+        <button class="button button-play begin-button" id="begin-operation" type="button">Begin operation <span class="button-arrow" aria-hidden="true">↗</span></button>
+        <p class="game-status" id="game-status" role="status" aria-live="polite">The vault is ready. Begin the operation.</p>
+      </aside>
+    </div>
+  </section>
+  <section class="play-screen" id="play-screen" aria-labelledby="play-title" hidden>
+    <header class="play-topbar">
+      <button class="back-link" id="back-to-briefing" type="button"><span aria-hidden="true">←</span> BRIEFING</button>
+      <a class="wordmark" href="#home" aria-label="Evader: The Cash Heist"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
+      <span class="operation-label">OPERATION 01 <i>/</i> LIVE</span>
+    </header>
+    <div class="play-layout">
+      <section class="live-board-column" aria-label="Live bank heist board">
+      <div class="live-board-heading">
+          <div><p class="board-kicker">THE BANK VAULT</p><h1 id="play-title">MAKE YOUR <span>MOVE</span></h1></div>
+          <span class="grid-size" id="live-grid-size">09 <i>×</i> 09</span>
+        </div>
+        <div class="game-board-frame live-frame">
+          <div class="live-board" id="live-board" role="grid" aria-label="Interactive 9 by 9 heist board"></div>
+        </div>
+        <p class="live-instruction" id="live-instruction">Select a piece, then choose a glowing square to move.</p>
+      </section>
+      <aside class="live-panel">
+        <p class="panel-kicker"><span></span> CURRENT TURN</p>
+        <div class="turn-indicator" id="turn-indicator"><span class="turn-dot"></span><span id="turn-name">HEIST CREW</span></div>
+        <p class="turn-subtitle" id="turn-subtitle">Your move</p>
+        <div class="mission-rule"></div>
+        <h2 class="live-objective-title">OBJECTIVE</h2>
+        <p class="objective-copy" id="live-objective">Secure the cash and get the carrier to the north exit. Police win by catching the crew.</p>
+        <div class="map-legend">
+          <div><span class="legend-piece crew-piece">N</span> HEIST CREW</div>
+          <div><span class="legend-piece police-piece">P</span> POLICE</div>
+          <div><span class="legend-piece cash-piece">$</span> CASH</div>
+          <div><span class="legend-piece exit-piece">↗</span> EXIT</div>
+        </div>
+        <p class="live-message" id="live-message" role="status" aria-live="polite">Crew moves first.</p>
+        <button class="button button-about restart-button" id="barricade-toggle" type="button" aria-pressed="false" hidden>Place barricade</button>
+        <button class="button button-about restart-button" id="restart-operation" type="button">Restart operation</button>
+      </aside>
+    </div>
+  </section>
+  <section class="victory-screen" id="victory-screen" aria-labelledby="victory-title" hidden>
+    <div class="victory-art" id="victory-art" role="img" aria-label=""></div>
+    <div class="victory-shade" aria-hidden="true"></div>
+    <header class="victory-topbar">
+      <a class="wordmark" href="#home" aria-label="Evader: The Cash Heist"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
+      <span class="operation-label">OPERATION 01 <i>/</i> RESOLUTION</span>
+    </header>
+    <main class="victory-content">
+      <p class="panel-kicker"><span></span> OPERATION COMPLETE</p>
+      <h1 id="victory-title">THE HEIST<br><span>SUCCEEDED</span></h1>
+      <p id="victory-copy">The crew made it out with the cash.</p>
+      <div class="victory-actions">
+        <button class="button button-play" id="play-again" type="button">Play again <span class="button-arrow" aria-hidden="true">↗</span></button>
+        <button class="button button-about" id="victory-home" type="button">Main menu</button>
+      </div>
+    </main>
+  </section>
+  <dialog class="about-dialog" id="about-dialog" aria-labelledby="about-title">
+    <button class="dialog-close" id="close-about" type="button" aria-label="Close About">×</button>
+    <div class="about-image" role="img" aria-label="The Professor holding a Salvador Dalí mask"></div>
+    <div class="about-copy">
+      <p class="dialog-kicker">THE PLAN</p>
+      <h2 id="about-title">About the game</h2>
+      <p>Lead a crew through a high-stakes bank heist. Outsmart the police, secure the cash, and find a way out together.</p>
+      <p class="about-note">This is a strategy game about timing, teamwork, and a very good plan.</p>
+      <button class="button button-play dialog-done" id="done-about" type="button">Back to the plan</button>
+    </div>
+  </dialog>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
