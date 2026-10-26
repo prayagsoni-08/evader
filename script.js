@@ -1064,7 +1064,7 @@ function movePiece(piece, side, destination) {
     if (piece.row === boardState.door.row && piece.col === boardState.door.col) {
       piece.escaped = true;
       const targetPolice = boardState.police.find((officer) => !officer.captured);
-      if (crewChoices.mode === "multiplayer" && targetPolice) {
+      if (crewChoices.mode === "multiplayer" && targetPolice && sidePieces("crew").length > 0) {
         boardState.eliminationPending = { crewId: piece.id, owner: piece.owner };
         setGameMessage(piece.owner === roomPlayerId ? "Heist successful! Click the police officer you want to eliminate." : `Crew ${piece.num} escaped. Waiting for them to choose a police target.`);
       } else setGameMessage(crewChoices.mode === "multiplayer" ? `Crew ${piece.num} escaped through the door.` : "The crew escaped through the door!");
