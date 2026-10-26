@@ -446,27 +446,76 @@ const perimeter = (size) => [
   ...Array.from({ length: size - 2 }, (_, i) => ({ row: size - 2 - i, col: 0 }))
 ];
 const edgeKey = (a, b) => [a.row + "," + a.col, b.row + "," + b.col].sort().join("|");
-function makeStarts(size) {
-  const mid = Math.floor(size / 2), edge = size - 1;
-  const crewCount = crewChoices.mode === "multiplayer" ? selectedCrewCount : 1;
-  const policeCount = crewChoices.mode === "multiplayer" ? selectedPoliceCount : 1;
-  const crewPositions = Array.from({ length: crewCount }, (_, i) => ({ row: edge, col: mid - Math.floor((crewCount - 1) / 2) + i }));
-  const policePositions = [{ row: 0, col: 1 }, { row: 0, col: edge - 1 }, { row: 1, col: mid }].slice(0, policeCount);
-  return {
-    crew: crewPositions.map((p, i) => ({ ...p, id: `crew-${i + 1}`, carrying: false, captured: false, escaped: false })),
-    police: policePositions.map((p, i) => ({ ...p, id: `police-${i + 1}`, captured: false }))
-  };
+const rnd = (n) => Math.floor(Math.random() * n);
+function outwardSides(row, col, size) {
+  const sides = [];
+  if (row === 0) sides.push("top"); if (row === size - 1) sides.push("bottom");
+  if (col === 0) sides.push("left"); if (col === size - 1) sides.push("right");
+  return sides;
+}
+function randomDoor(size, blockedKeys, avoid) {
+  for (let i = 0; i < 500; i += 1) {
+    const edge = rnd(4), pos = rnd(size);
+    const row = edge === 0 ? 0 : edge === 1 ? size - 1 : pos, col = edge === 2 ? 0 : edge === 3 ? size - 1 : pos;
+    if (blockedKeys.has(row + "," + col) || (avoid && avoid.row === row && avoid.col === col)) continue;
+    const sides = outwardSides(row, col, size);
+    return { row, col, side: sides[rnd(sides.length)] };
+  }
+  return { row: 0, col: Math.floor(size / 2), side: "top" };
+}
+function rosterFor(side, count) {
+  if (crewChoices.mode !== "multiplayer") {
+    const human = selectedHumanSide() === side;
+    return [{ name: human ? (cleanName(playerName) || "YOU") : "CPU", owner: human ? roomPlayerId : "cpu" }];
+  }
+  const players = currentRoomPlayers().filter((p) => p.role === side).sort((a, b) => String(a.joinedAt).localeCompare(String(b.joinedAt)));
+  return Array.from({ length: count }, (_, i) => ({ name: cleanName(players[i]?.name) || `Player ${i + 1}`, owner: players[i]?.playerId || "" }));
 }
 function freshBoardState() {
-  const size = selectedBoardSize;
-  const starts = makeStarts(size);
-  return {
-    size, ...starts,
-    cash: { row: Math.floor(size / 2), col: Math.floor(size / 2), available: true },
-    hatchIndex: Math.floor(size / 2), hatchPositions: perimeter(size),
-    walls: new Set(), activeSide: "crew", phaseIds: [], actedIds: new Set(),
-    selectedId: null, barricadeMode: false, barricadeAnchor: null, winner: null
+  const size = selectedBoardSize, multi = crewChoices.mode === "multiplayer";
+  const crewN = multi ? selectedCrewCount : 1, policeN = multi ? selectedPoliceCount : 1;
+  const taken = new Set();
+  const randCell = (ok) => {
+    for (let i = 0; i < 800; i += 1) {
+      const row = rnd(size), col = rnd(size);
+      if (!taken.has(row + "," + col) && (!ok || ok(row, col))) { taken.add(row + "," + col); return { row, col }; }
+    }
+    return { row: 1, col: 1 };
   };
+  const door = randomDoor(size, taken); taken.add(door.row + "," + door.col);
+  const crewRoster = rosterFor("crew", crewN), policeRoster = rosterFor("police", policeN);
+  const crew = crewRoster.map((r, i) => ({ ...randCell(), id: `crew-${i + 1}`, num: i + 1, ...r, captured: false, escaped: false }));
+  const police = policeRoster.map((r, i) => ({ ...randCell((row, col) => crew.every((c) => Math.abs(c.row - row) + Math.abs(c.col - col) >= 4)), id: `police-${i + 1}`, num: i + 1, ...r, captured: false }));
+  const cash = Array.from({ length: 1 + rnd(2) }, () => randCell((row, col) => row > 0 && col > 0 && row < size - 1 && col < size - 1));
+  return { size, crew, police, cash, door, walls: new Set(), activeSide: "crew", phaseIds: [], actedIds: new Set(), selectedId: null, barricadeMode: false, barricadeAnchor: null, winner: null };
+}
+function relocateDoorAndCash() {
+  const size = boardState.size, occupied = new Set([...boardState.crew, ...boardState.police].filter((p) => !p.captured && !p.escaped).map((p) => p.row + "," + p.col));
+  boardState.door = randomDoor(size, occupied, boardState.door);
+  const used = new Set([...occupied, boardState.door.row + "," + boardState.door.col]);
+  boardState.cash = boardState.cash.map(() => {
+    for (let i = 0; i < 500; i += 1) {
+      const row = 1 + rnd(size - 2), col = 1 + rnd(size - 2);
+      if (!used.has(row + "," + col)) { used.add(row + "," + col); return { row, col }; }
+    }
+    return { row: 1, col: 1 };
+  });
+}
+function boardConnected() {
+  const seen = new Set(["0,0"]), queue = [{ row: 0, col: 0 }];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const next = { row: cur.row + dr, col: cur.col + dc }, k = next.row + "," + next.col;
+      if (!insideBoard(next.row, next.col) || seen.has(k) || blocked(cur, next)) continue;
+      seen.add(k); queue.push(next);
+    }
+  }
+  return seen.size === boardState.size * boardState.size;
+}
+function myUnactedPieces() {
+  const side = boardState.activeSide;
+  return sidePieces(side).filter((p) => boardState.phaseIds.includes(p.id) && !boardState.actedIds.has(p.id) && (crewChoices.mode !== "multiplayer" || p.owner === roomPlayerId));
 }
 function sidePieces(side) { return boardState[side].filter((piece) => side === "crew" ? !piece.captured && !piece.escaped : !piece.captured); }
 function pieceAt(row, col) { return ["crew", "police"].flatMap((side) => sidePieces(side).map((piece) => ({ side, piece }))).find(({ piece }) => piece.row === row && piece.col === col) || null; }
@@ -498,7 +547,7 @@ function pathExists(from, to) {
 }
 function selectedHumanSide() { return crewChoices.role || "crew"; }
 function isComputerTurn() { return crewChoices.mode === "single-player" && boardState.activeSide !== selectedHumanSide(); }
-function isRemoteTurn() { return crewChoices.mode === "multiplayer" && activeRoomChannel && boardState.activeSide !== selectedHumanSide(); }
+function isRemoteTurn() { return crewChoices.mode === "multiplayer" && Boolean(activeRoomChannel) && (boardState.activeSide !== selectedHumanSide() || !myUnactedPieces().length); }
 function renderLiveBoard() {
   liveBoard.replaceChildren();
   liveBoard.style.gridTemplateColumns = `repeat(${boardState.size}, minmax(0, 1fr))`;
@@ -508,7 +557,7 @@ function renderLiveBoard() {
   document.getElementById("live-grid-size").innerHTML = `${String(boardState.size).padStart(2, "0")} <i>×</i> ${String(boardState.size).padStart(2, "0")}`;
   const selected = sidePieces(boardState.activeSide).find((piece) => piece.id === boardState.selectedId);
   const targets = selected ? legalMoves(selected, boardState.activeSide) : [];
-  const hatch = boardState.hatchPositions[boardState.hatchIndex];
+  const door = boardState.door, mySide = selectedHumanSide();
   for (let row = 0; row < boardState.size; row += 1) for (let col = 0; col < boardState.size; col += 1) {
     const cell = document.createElement("button"); cell.type = "button"; cell.className = "play-cell";
     cell.dataset.row = String(row); cell.dataset.col = String(col); cell.addEventListener("click", handleBoardCellClick);
@@ -522,9 +571,12 @@ function renderLiveBoard() {
     if (col > 0 && blocked({ row, col }, { row, col: col - 1 })) wallClasses.push("wall-left");
     if (wallClasses.length) cell.classList.add(...wallClasses);
     let token = null;
-    if (occupant) token = occupant.side === "crew" ? [occupant.piece.carrying ? "N$" : "N", "crew-token", "Heist crew"] : ["P", "police-token", "Police"];
-    else if (boardState.cash.available && row === boardState.cash.row && col === boardState.cash.col) token = ["$", "cash-token", "Cash"];
-    else if (row === hatch.row && col === hatch.col) token = ["↗", "exit-token", "Moving escape hatch"];
+    const isDoor = row === door.row && col === door.col;
+    if (isDoor) cell.classList.add("door-cell", `door-${door.side}`);
+    if (occupant) {
+      const ally = occupant.side === mySide, crewPiece = occupant.side === "crew";
+      token = [`${crewPiece ? "N" : "P"}${occupant.piece.num}`, `${occupant.side}-token ${ally ? "ally" : "enemy"}`, `${ally ? "Your team" : "Opponent"} ${crewPiece ? "heist crew" : "police"} ${occupant.piece.num}`];
+    } else if (boardState.cash.some((c) => c.row === row && c.col === col)) token = ["$", "cash-token", "Cash"];
     if (token) {
       const marker = document.createElement("span");
       marker.className = `play-token ${token[1]}${occupant?.piece.carrying ? " carrying" : ""}`;
@@ -532,15 +584,11 @@ function renderLiveBoard() {
     }
     const isMove = cell.classList.contains("legal-cell");
     cell.setAttribute("aria-label", `Row ${row + 1}, column ${col + 1}${token ? `, ${token[2]}${occupant?.piece.carrying ? " carrying cash" : ""}` : ""}${isSelected ? ", selected" : ""}${isMove ? ", legal move" : ""}${cell.classList.contains("wall-top") ? ", barricade above" : ""}${cell.classList.contains("wall-left") ? ", barricade left" : ""}`);
+    if (isDoor) cell.setAttribute("aria-label", `${cell.getAttribute("aria-label")}, exit door`);
     liveBoard.append(cell);
   }
   if (focusedCell) liveBoard.querySelector(`.play-cell[data-row="${focusedCell.row}"][data-col="${focusedCell.col}"]`)?.focus({ preventScroll: true });
-  const crewTurn = boardState.activeSide === "crew";
-  document.getElementById("turn-name").textContent = crewTurn ? "HEIST CREW" : "POLICE";
-  document.getElementById("turn-indicator").classList.toggle("police-turn", !crewTurn);
-  const remainingPhase = boardState.phaseIds.filter((id) => sidePieces(boardState.activeSide).some((p) => p.id === id) && !boardState.actedIds.has(id)).length;
-  document.getElementById("turn-subtitle").textContent = boardState.winner ? `${boardState.winner === "crew" ? "Heist Crew" : "Police"} win` : isComputerTurn() ? "Computer team phase" : isRemoteTurn() ? "Waiting for the other team" : `Team phase · ${remainingPhase} action${remainingPhase === 1 ? "" : "s"} left`;
-  document.getElementById("live-objective").textContent = "Crew: collect the cash and get every crew member out through the moving hatch. Police: catch the crew or place barricades without sealing every route.";
+  renderRoster();
   const barricadeButton = document.getElementById("barricade-toggle");
   barricadeButton.hidden = Boolean(boardState.winner) || boardState.activeSide !== "police" || isComputerTurn() || isRemoteTurn();
   barricadeButton.setAttribute("aria-pressed", String(boardState.barricadeMode));
@@ -549,6 +597,22 @@ function renderLiveBoard() {
   const restartButton = document.getElementById("restart-operation");
   restartButton.textContent = boardState.winner ? "Play again" : "Restart operation";
   restartButton.disabled = crewChoices.mode === "multiplayer" && !isRoomHost;
+}
+function renderRoster() {
+  const mySide = selectedHumanSide(), box = document.getElementById("roster");
+  box.replaceChildren();
+  [[mySide, "ally", "YOUR TEAM"], [mySide === "crew" ? "police" : "crew", "enemy", "OPPONENTS"]].forEach(([side, tone, label]) => {
+    const title = document.createElement("p"); title.className = `roster-title ${tone}`; title.textContent = `${label} · ${side === "crew" ? "HEIST CREW" : "POLICE"}`; box.append(title);
+    boardState[side].forEach((piece) => {
+      const live = sidePieces(side).includes(piece);
+      const turn = live && !boardState.winner && boardState.activeSide === side && boardState.phaseIds.includes(piece.id) && !boardState.actedIds.has(piece.id);
+      const card = document.createElement("div"); card.className = `player-card ${tone}${turn ? " active" : ""}${live ? "" : " out"}`;
+      const num = document.createElement("b"); num.textContent = String(piece.num);
+      const name = document.createElement("span"); name.textContent = cleanName(piece.name) || `Player ${piece.num}`;
+      const state = document.createElement("em"); state.textContent = piece.escaped ? "ESCAPED" : piece.captured ? "CAUGHT" : turn ? "TURN" : "";
+      card.append(num, name, state); box.append(card);
+    });
+  });
 }
 function setGameMessage(message) { document.getElementById("live-message").textContent = message; }
 function serializeBoardSnapshot() {
@@ -593,11 +657,12 @@ function skipUnavailableActions() {
   renderLiveBoard();
   if (isComputerTurn()) scheduleComputerMove();
 }
+function isMine(piece) { return crewChoices.mode !== "multiplayer" || piece.owner === roomPlayerId; }
 function handleBoardCellClick(event) {
   if (boardState.winner || isComputerTurn() || isRemoteTurn()) return;
   const row = Number(event.currentTarget.dataset.row), col = Number(event.currentTarget.dataset.col), occupant = pieceAt(row, col);
   if (boardState.barricadeMode) {
-    if (!boardState.selectedId && occupant?.side === "police" && !boardState.actedIds.has(occupant.piece.id)) {
+    if (!boardState.selectedId && occupant?.side === "police" && !boardState.actedIds.has(occupant.piece.id) && isMine(occupant.piece)) {
       boardState.selectedId = occupant.piece.id; setGameMessage("Police unit selected. Choose any two adjacent squares to barricade their passage."); renderLiveBoard(); return;
     }
     if (!boardState.selectedId) { setGameMessage("Select an unused police unit first."); return; }
@@ -613,9 +678,7 @@ function handleBoardCellClick(event) {
     const key = edgeKey(first, second);
     if (boardState.walls.has(key)) { setGameMessage("That passage is already barricaded."); return; }
     boardState.walls.add(key);
-    const hatchCell = boardState.hatchPositions[boardState.hatchIndex];
-    const trapped = sidePieces("crew").some((p) => legalMoves(p, "crew").length === 0 || !pathExists(p, hatchCell));
-    if (trapped) { boardState.walls.delete(key); setGameMessage("That barricade would completely trap a crew member."); return; }
+    if (!boardConnected()) { boardState.walls.delete(key); setGameMessage("Barricades cannot form a closed area."); return; }
     finishPieceAction(boardState.selectedId, "Passage barricaded."); return;
   }
   if (boardState.selectedId) {
@@ -623,7 +686,7 @@ function handleBoardCellClick(event) {
     const move = selected && legalMoves(selected, boardState.activeSide).find((target) => target.row === row && target.col === col);
     if (move) { movePiece(selected, boardState.activeSide, move); return; }
   }
-  if (occupant?.side === boardState.activeSide && !boardState.actedIds.has(occupant.piece.id)) {
+  if (occupant?.side === boardState.activeSide && !boardState.actedIds.has(occupant.piece.id) && isMine(occupant.piece)) {
     boardState.selectedId = occupant.piece.id; setGameMessage("Choose a glowing square. Each active unit acts once in its team phase."); renderLiveBoard();
   } else { boardState.selectedId = null; setGameMessage("Select an unused unit from the current team phase."); renderLiveBoard(); }
 }
@@ -637,48 +700,43 @@ document.getElementById("barricade-toggle").addEventListener("click", () => {
 function movePiece(piece, side, destination) {
   const target = pieceAt(destination.row, destination.col);
   if (target) {
-    if (target.side === "crew") {
-      target.piece.captured = true;
-      if (target.piece.carrying) { boardState.cash.available = true; boardState.cash.row = target.piece.row; boardState.cash.col = target.piece.col; target.piece.carrying = false; }
-      setGameMessage("Police captured a crew member.");
-    } else {
-      // A crew member walking into a police unit is the one who gets caught.
-      piece.captured = true;
-      if (piece.carrying) { boardState.cash.available = true; boardState.cash.row = destination.row; boardState.cash.col = destination.col; piece.carrying = false; }
-      setGameMessage("A crew member ran into the police and was caught.");
-      declareWinnerIfOver();
-      finishPieceAction(piece.id, boardState.winner ? null : undefined);
-      return;
+    if (target.side === "crew") { target.piece.captured = true; setGameMessage(`Police caught crew ${target.piece.num}.`); }
+    else {
+      piece.captured = true; setGameMessage(`Crew ${piece.num} ran into the police and was caught.`);
+      declareWinnerIfOver(); finishPieceAction(piece.id, boardState.winner ? null : undefined); return;
     }
   }
   piece.row = destination.row; piece.col = destination.col;
-  if (side === "crew" && boardState.cash.available && piece.row === boardState.cash.row && piece.col === boardState.cash.col) {
-    boardState.cash.available = false; piece.carrying = true;
-    boardState.hatchIndex = (boardState.hatchIndex + Math.floor(boardState.hatchPositions.length / 2)) % boardState.hatchPositions.length;
-    setGameMessage("Cash secured. The escape hatch has shifted to the far side of the vault.");
+  if (side === "crew") {
+    if (boardState.cash.some((c) => c.row === piece.row && c.col === piece.col)) {
+      boardState.cash = boardState.cash.filter((c) => !(c.row === piece.row && c.col === piece.col));
+      boardState.cash.push({ row: -1, col: -1 }); relocateDoorAndCash();
+      setGameMessage("Cash grabbed. The door and the cash moved to new spots.");
+    }
+    if (piece.row === boardState.door.row && piece.col === boardState.door.col) {
+      piece.escaped = true;
+      setGameMessage(crewChoices.mode === "multiplayer" ? `Crew ${piece.num} escaped through the door.` : "The crew escaped through the door!");
+    }
   }
-  const hatch = boardState.hatchPositions[boardState.hatchIndex];
-  if (side === "crew" && piece.carrying && piece.row === hatch.row && piece.col === hatch.col) {
-    piece.escaped = true; piece.carrying = false; respawnCash(); setGameMessage("A crew member escaped through the hatch. More cash is out for the rest of the crew.");
-  }
-  declareWinnerIfOver();
-  finishPieceAction(piece.id, boardState.winner ? null : undefined);
+  declareWinnerIfOver(); finishPieceAction(piece.id, boardState.winner ? null : undefined);
 }
 function declareWinnerIfOver() {
   if (boardState.winner || sidePieces("crew").length) return false;
-  // Crew wins only if every member escaped; any capture means the police win.
-  boardState.winner = boardState.crew.every((p) => p.escaped) ? "crew" : "police";
-  setGameMessage(boardState.winner === "crew" ? "Every crew member escaped. The heist is complete!" : "Police caught a crew member. Heist foiled.");
+  boardState.winner = boardState.crew.some((p) => p.escaped) ? "crew" : "police";
+  setGameMessage(boardState.winner === "crew" ? "The crew made it out. Crew wins!" : "Every crew member was caught. Police win!");
   return true;
 }
 function showVictoryScreen() {
   if (!boardState.winner) return;
-  const crewWon = boardState.winner === "crew";
+  const crewWon = boardState.winner === "crew", mySide = selectedHumanSide(), iWon = boardState.winner === mySide;
   const art = document.getElementById("victory-art");
   art.style.backgroundImage = `url("assets/${crewWon ? "crew-victory.jpg" : "police-victory.jpg"}")`;
   art.setAttribute("aria-label", crewWon ? "The heist crew celebrates their escape" : "The police have stopped the heist crew");
-  document.getElementById("victory-title").innerHTML = crewWon ? "THE HEIST<br><span>SUCCEEDED</span>" : "THE HEIST<br><span>FOILED</span>";
-  document.getElementById("victory-copy").textContent = crewWon ? "Every crew member made it out. The cash is yours." : "The police stopped the escape and secured the vault.";
+  const sideName = mySide === "crew" ? "CREW" : "POLICE";
+  document.getElementById("victory-title").innerHTML = `${sideName}<br><span>${iWon ? "WINS" : "LOSES"}</span>`;
+  document.getElementById("victory-copy").textContent = crewWon
+    ? (mySide === "crew" ? "You reached the door and escaped." : "The crew reached the door. The police were too slow.")
+    : (mySide === "police" ? "Every crew member was caught. You stopped the heist." : "The whole crew was caught. The heist failed.");
   const replayButton = document.getElementById("play-again");
   replayButton.disabled = crewChoices.mode === "multiplayer" && !isRoomHost;
   replayButton.innerHTML = replayButton.disabled ? "Waiting for host" : 'Play again <span class="button-arrow" aria-hidden="true">↗</span>';
@@ -686,17 +744,6 @@ function showVictoryScreen() {
   document.getElementById("victory-screen").hidden = false;
   document.getElementById("play-again").focus();
   window.scrollTo(0, 0);
-}
-function respawnCash() {
-  if (!sidePieces("crew").length) return;
-  const mid = Math.floor(boardState.size / 2), hatch = boardState.hatchPositions[boardState.hatchIndex];
-  const free = [];
-  for (let row = 1; row < boardState.size - 1; row += 1) for (let col = 1; col < boardState.size - 1; col += 1) {
-    if (!pieceAt(row, col) && !(row === hatch.row && col === hatch.col)) free.push({ row, col });
-  }
-  free.sort((a, b) => manhattan(a, { row: mid, col: mid }) - manhattan(b, { row: mid, col: mid }));
-  const spot = free[0];
-  if (spot) { boardState.cash.row = spot.row; boardState.cash.col = spot.col; boardState.cash.available = true; }
 }
 function finishPieceAction(pieceId, message) {
   boardState.actedIds.add(pieceId); boardState.selectedId = null; boardState.barricadeMode = false; boardState.barricadeAnchor = null;
@@ -738,11 +785,7 @@ function pathDistance(from, to) {
 }
 function computerMoveScore(candidate, side) {
   const { piece, move } = candidate, target = pieceAt(move.row, move.col);
-  if (side === "crew") {
-    const hatchCell = boardState.hatchPositions[boardState.hatchIndex];
-    const goal = piece.carrying || !boardState.cash.available ? hatchCell : boardState.cash;
-    return (target?.side === "police" ? 100 : 0) + pathDistance(move, goal);
-  }
+  if (side === "crew") return (target?.side === "police" ? 100 : 0) + pathDistance(move, boardState.door);
   const crew = sidePieces("crew");
   const nearest = [...crew].sort((a, b) => manhattan(a, piece) - manhattan(b, piece))[0];
   return (target?.side === "crew" ? -100 : 0) + (nearest ? pathDistance(move, nearest) : 0);

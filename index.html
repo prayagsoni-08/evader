@@ -8,9 +8,9 @@
   <title>Evader: The Cash Heist</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
-  <link rel="preload" as="image" href="assets/crew-background.jpg" media="(min-width: 46.01rem)">
-  <link rel="preload" as="image" href="assets/money-heist-poster.jpg" media="(max-width: 46rem)">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Special+Elite&display=swap">
+  <link rel="preload" as="image" href="assets/heist-hostage-scene.jpg" media="(min-width: 46.01rem)">
+  <link rel="preload" as="image" href="assets/heist-hostage-scene.jpg" media="(max-width: 46rem)">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
   <script src="supabase-config.js" defer></script>
@@ -192,20 +192,16 @@
         <div class="game-board-frame live-frame">
           <div class="live-board" id="live-board" role="group" aria-label="Interactive 9 by 9 heist board"></div>
         </div>
-        <p class="live-instruction" id="live-instruction">Select a piece, then choose a glowing square to move.</p>
       </section>
       <aside class="live-panel">
-        <p class="panel-kicker"><span></span> CURRENT TURN</p>
-        <div class="turn-indicator" id="turn-indicator"><span class="turn-dot"></span><span id="turn-name">HEIST CREW</span></div>
-        <p class="turn-subtitle" id="turn-subtitle">Your move</p>
+        <p class="panel-kicker"><span></span> PLAYERS</p>
+        <div class="roster" id="roster" aria-label="Players"></div>
         <div class="mission-rule"></div>
-        <h2 class="live-objective-title">OBJECTIVE</h2>
-        <p class="objective-copy" id="live-objective">Secure the cash and get the carrier to the north exit. Police win by catching the crew.</p>
         <div class="map-legend">
-          <div><span class="legend-piece crew-piece">N</span> HEIST CREW</div>
-          <div><span class="legend-piece police-piece">P</span> POLICE</div>
+          <div><span class="legend-piece ally-piece">1</span> YOUR TEAM</div>
+          <div><span class="legend-piece enemy-piece">1</span> OPPONENTS</div>
           <div><span class="legend-piece cash-piece">$</span> CASH</div>
-          <div><span class="legend-piece exit-piece">↗</span> EXIT</div>
+          <div><span class="legend-door"></span> EXIT DOOR</div>
         </div>
         <p class="live-message" id="live-message" role="status" aria-live="polite">Crew moves first.</p>
         <button class="button button-about restart-button" id="barricade-toggle" type="button" aria-pressed="false" hidden>Place barricade</button>
