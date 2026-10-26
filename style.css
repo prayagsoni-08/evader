@@ -955,7 +955,7 @@ h1, h2 { text-shadow: 0 0 30px rgba(216, 35, 27, 0.35); }
 /* Police walls: drag a bar onto the board; a shadow shows where it will snap. */
 .wall-tray { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; padding: 0.2rem 1rem 0.8rem; transition: opacity 0.2s; }
 .wall-tray.is-off { opacity: 0.35; }
-.wall-tray-label { color: var(--muted); font-family: var(--font-ui); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.14em; line-height: 1.2; }
+.wall-tray-label { white-space: pre-line; color: var(--muted); font-family: var(--font-ui); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.14em; line-height: 1.2; }
 .wall-chip { display: grid; place-items: center; width: 4.4rem; height: 3.1rem; border: 2px solid var(--line-strong); background: rgba(5, 19, 23, 0.7); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .wall-tray.is-off .wall-chip { cursor: not-allowed; }
 .wall-chip:active { cursor: grabbing; border-color: var(--red-hot); }

@@ -564,7 +564,10 @@ async function connectToRoom(code, host) {
           return;
         }
         const actingPiece = boardState && nextActingPiece();
-        if (!actingPiece || actingPiece.owner !== sender.playerId || !isValidBoardSnapshot(payload.state)) {
+        const pendingElimination = boardState?.eliminationPending;
+        const eliminatedTargets = pendingElimination ? payload.state?.police?.filter((piece) => piece.captured && piece.eliminatedBy === pendingElimination.crewId && !boardState.police.find((prior) => prior.id === piece.id)?.captured) : [];
+        const isEliminationChoice = Boolean(pendingElimination && pendingElimination.owner === sender.playerId && payload.state?.eliminationPending == null && eliminatedTargets?.length === 1);
+        if ((!isEliminationChoice && (!actingPiece || actingPiece.owner !== sender.playerId)) || !isValidBoardSnapshot(payload.state)) {
           broadcastRoom("sync-reject", { targetId: sender.playerId }).catch(() => {});
           if (boardState) sendCanonicalBoardSnapshot(true);
           return;
@@ -683,9 +686,9 @@ function freshBoardState() {
   const door = randomDoor(size, taken); taken.add(door.row + "," + door.col);
   const crewRoster = rosterFor("crew", crewN), policeRoster = rosterFor("police", policeN);
   const crew = crewRoster.map((r, i) => ({ ...randCell(), id: `crew-${i + 1}`, num: i + 1, ...r, captured: false, escaped: false }));
-  const police = policeRoster.map((r, i) => ({ ...randCell((row, col) => crew.every((c) => Math.abs(c.row - row) + Math.abs(c.col - col) >= 4)), id: `police-${i + 1}`, num: i + 1, ...r, captured: false }));
+  const police = policeRoster.map((r, i) => ({ ...randCell((row, col) => crew.every((c) => Math.abs(c.row - row) + Math.abs(c.col - col) >= 4)), id: `police-${i + 1}`, num: i + 1, ...r, captured: false, barricadesUsed: 0, eliminatedBy: null }));
   const cash = Array.from({ length: 1 + rnd(2) }, () => randCell((row, col) => row > 0 && col > 0 && row < size - 1 && col < size - 1));
-  return { size, crew, police, cash, door, walls: new Set(), activeSide: "crew", phaseIds: [], actedIds: new Set(), selectedId: null, barricadeMode: false, barricadeAnchor: null, winner: null };
+  return { size, crew, police, cash, door, walls: new Set(), activeSide: "crew", phaseIds: [], actedIds: new Set(), selectedId: null, barricadeMode: false, barricadeAnchor: null, eliminationPending: null, winner: null };
 }
 function relocateDoorAndCash() {
   const size = boardState.size, occupied = new Set([...boardState.crew, ...boardState.police].filter((p) => !p.captured && !p.escaped).map((p) => p.row + "," + p.col));
@@ -762,6 +765,7 @@ function isRemoteTurn() { return crewChoices.mode === "multiplayer" && Boolean(a
 function isPieceTurn(side, piece) {
   return !boardState.winner && boardState.activeSide === side && nextActingPiece()?.id === piece.id;
 }
+function isEliminationPicker() { return crewChoices.mode === "multiplayer" && boardState?.eliminationPending?.owner === roomPlayerId; }
 function renderLiveBoard() {
   liveBoard.replaceChildren();
   liveBoard.style.gridTemplateColumns = `repeat(${boardState.size}, minmax(0, 1fr))`;
@@ -773,7 +777,7 @@ function renderLiveBoard() {
   }
   const focusedCell = document.activeElement?.classList?.contains("play-cell") ? { row: document.activeElement.dataset.row, col: document.activeElement.dataset.col } : null;
   const selected = sidePieces(boardState.activeSide).find((piece) => piece.id === boardState.selectedId);
-  const targets = selected && !isComputerTurn() && !isRemoteTurn() ? legalMoves(selected, boardState.activeSide) : [];
+  const targets = isEliminationPicker() ? boardState.police.filter((officer) => !officer.captured).map((officer) => ({ row: officer.row, col: officer.col })) : selected && !isComputerTurn() && !isRemoteTurn() ? legalMoves(selected, boardState.activeSide) : [];
   const door = boardState.door, mySide = selectedHumanSide();
   for (let row = 0; row < boardState.size; row += 1) for (let col = 0; col < boardState.size; col += 1) {
     const cell = document.createElement("button"); cell.type = "button"; cell.className = "play-cell";
@@ -807,7 +811,10 @@ function renderLiveBoard() {
   if (focusedCell) liveBoard.querySelector(`.play-cell[data-row="${focusedCell.row}"][data-col="${focusedCell.col}"]`)?.focus({ preventScroll: true });
   renderRoster();
   const tray = document.getElementById("wall-tray");
+  const officer = boardState.activeSide === "police" ? nextActingPiece() : boardState.police.find((piece) => piece.owner === roomPlayerId);
+  const remaining = barricadesLeft(officer);
   tray.hidden = mySide !== "police";
+  document.querySelector(".wall-tray-label").textContent = `BARRICADES LEFT\n${remaining}/10`;
   tray.classList.toggle("is-off", !canBuildWall());
   playScreen.classList.toggle("game-over", Boolean(boardState.winner));
 }
@@ -842,9 +849,11 @@ function isValidBoardSnapshot(snapshot) {
       const piece = pieces[index];
       if (!piece || piece.id !== `${side}-${index + 1}` || !Number.isInteger(piece.row) || !Number.isInteger(piece.col) || piece.row < 0 || piece.col < 0 || piece.row >= snapshot.size || piece.col >= snapshot.size || typeof piece.owner !== "string" || typeof piece.captured !== "boolean") return false;
       if (side === "crew" && typeof piece.escaped !== "boolean") return false;
+      if (side === "police" && (!Number.isInteger(piece.barricadesUsed) || piece.barricadesUsed < 0 || piece.barricadesUsed > 10 || !(piece.eliminatedBy === null || typeof piece.eliminatedBy === "string"))) return false;
       ids.add(piece.id);
     }
   }
+  if (snapshot.eliminationPending !== null && (!snapshot.eliminationPending || typeof snapshot.eliminationPending !== "object" || !snapshot.crew.some((piece) => piece.id === snapshot.eliminationPending.crewId && piece.escaped && piece.owner === snapshot.eliminationPending.owner) || !snapshot.police.some((piece) => !piece.captured))) return false;
   if (!Array.isArray(snapshot.phaseIds) || snapshot.phaseIds.some((id) => !ids.has(id)) || new Set(snapshot.phaseIds).size !== snapshot.phaseIds.length) return false;
   if (!Array.isArray(snapshot.actedIds) || snapshot.actedIds.some((id) => !snapshot.phaseIds.includes(id)) || new Set(snapshot.actedIds).size !== snapshot.actedIds.length) return false;
   if (!Array.isArray(snapshot.cash) || snapshot.cash.length > 2 || snapshot.cash.some((cell) => !cell || !Number.isInteger(cell.row) || !Number.isInteger(cell.col) || cell.row < 0 || cell.col < 0 || cell.row >= snapshot.size || cell.col >= snapshot.size)) return false;
@@ -855,8 +864,19 @@ function isValidBoardSnapshot(snapshot) {
 }
 function applyBoardSnapshot(snapshot, revision = 0) {
   if (!isValidBoardSnapshot(snapshot)) return false;
+  const priorPolice = boardState?.police || [];
   boardState = { ...snapshot, walls: new Set(snapshot.walls), phaseIds: [...snapshot.phaseIds], actedIds: new Set(snapshot.actedIds) };
   boardRevision = Number.isInteger(revision) ? revision : 0;
+  const newlyEliminated = boardState.police.find((piece) => piece.captured && piece.eliminatedBy && !priorPolice.find((prior) => prior.id === piece.id)?.captured);
+  if (newlyEliminated) {
+    const escapedCrew = boardState.crew.find((piece) => piece.id === newlyEliminated.eliminatedBy);
+    setGameMessage(newlyEliminated.owner === roomPlayerId
+      ? `You were eliminated by Crew ${escapedCrew?.num || ""} after they escaped.`
+      : `Crew ${escapedCrew?.num || "An escaped crew member"} eliminated Police ${newlyEliminated.num}.`);
+  } else if (boardState.eliminationPending) {
+    const picker = boardState.eliminationPending.owner === roomPlayerId;
+    setGameMessage(picker ? "Heist successful! Click the police officer you want to eliminate." : "A crew member escaped and is choosing a police target.");
+  }
   if (boardState.winner) showVictoryScreen();
   return true;
 }
@@ -925,8 +945,21 @@ function isMine(piece) {
   return piece.owner === roomPlayerId || (isRoomHost && Boolean(activeRoomChannel) && !isOwnerConnected(piece.owner));
 }
 function handleBoardCellClick(event) {
-  if (boardState.winner || isComputerTurn() || isRemoteTurn()) return;
   const row = Number(event.currentTarget.dataset.row), col = Number(event.currentTarget.dataset.col), occupant = pieceAt(row, col);
+  if (boardState.eliminationPending) {
+    if (!isEliminationPicker()) return;
+    if (occupant?.side !== "police") { setGameMessage("Click the police officer you want to eliminate."); return; }
+    const pending = boardState.eliminationPending;
+    const escapedCrew = boardState.crew.find((piece) => piece.id === pending.crewId);
+    occupant.piece.captured = true;
+    occupant.piece.eliminatedBy = pending.crewId;
+    boardState.eliminationPending = null;
+    setGameMessage(`You eliminated Police ${occupant.piece.num} after escaping.`);
+    if (declareWinnerIfOver()) { broadcastBoardSnapshot(); renderLiveBoard(); showVictoryScreen(); return; }
+    advanceAfterAction();
+    return;
+  }
+  if (boardState.winner || isComputerTurn() || isRemoteTurn()) return;
   if (boardState.selectedId) {
     const selected = sidePieces(boardState.activeSide).find((piece) => piece.id === boardState.selectedId);
     const move = selected && legalMoves(selected, boardState.activeSide).find((target) => target.row === row && target.col === col);
@@ -941,8 +974,10 @@ function handleBoardCellClick(event) {
 const wallShadow = document.getElementById("wall-shadow");
 const liveFrame = document.getElementById("live-frame");
 let wallDrag = null;
+function barricadesLeft(piece) { return Math.max(0, 10 - (piece?.barricadesUsed || 0)); }
 function canBuildWall() {
-  return Boolean(boardState) && !boardState.winner && boardState.activeSide === "police" && selectedHumanSide() === "police" && !isComputerTurn() && !isRemoteTurn() && myUnactedPieces().length > 0;
+  const officer = boardState && myUnactedPieces()[0];
+  return Boolean(boardState) && !boardState.winner && boardState.activeSide === "police" && selectedHumanSide() === "police" && !isComputerTurn() && !isRemoteTurn() && officer && barricadesLeft(officer) > 0;
 }
 const clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 function wallEdgeAt(x, y, orient) {
@@ -988,13 +1023,19 @@ function endWallDrag(event, apply) {
   if (!edge.valid) { setGameMessage(edge.reason); return; }
   if (!canBuildWall()) return;
   const unit = myUnactedPieces()[0];
+  if (barricadesLeft(unit) <= 0) { setGameMessage("This police officer has used all 10 barricades."); return; }
   boardState.walls.add(edge.key);
-  finishPieceAction(unit.id, "Wall built.");
+  unit.barricadesUsed += 1;
+  finishPieceAction(unit.id, `Barricade placed. ${barricadesLeft(unit)}/10 left.`);
 }
 document.querySelectorAll(".wall-chip").forEach((chip) => {
   chip.addEventListener("pointerdown", (event) => {
     if (wallDrag) return;
-    if (!canBuildWall()) { setGameMessage("You can build a wall on your turn."); return; }
+    if (!canBuildWall()) {
+      const officer = boardState && boardState.activeSide === "police" ? myUnactedPieces()[0] : null;
+      setGameMessage(officer && barricadesLeft(officer) === 0 ? "This police officer has used all 10 barricades." : "You can build a wall on your turn.");
+      return;
+    }
     event.preventDefault(); chip.setPointerCapture(event.pointerId);
     const ghost = document.createElement("div"); ghost.className = "wall-ghost"; document.body.append(ghost);
     wallDrag = { orient: chip.dataset.orient, pointerId: event.pointerId, lift: event.pointerType === "touch" ? 56 : 0, ghost, edge: null };
@@ -1022,7 +1063,11 @@ function movePiece(piece, side, destination) {
     }
     if (piece.row === boardState.door.row && piece.col === boardState.door.col) {
       piece.escaped = true;
-      setGameMessage(crewChoices.mode === "multiplayer" ? `Crew ${piece.num} escaped through the door.` : "The crew escaped through the door!");
+      const targetPolice = boardState.police.find((officer) => !officer.captured);
+      if (crewChoices.mode === "multiplayer" && targetPolice) {
+        boardState.eliminationPending = { crewId: piece.id, owner: piece.owner };
+        setGameMessage(piece.owner === roomPlayerId ? "Heist successful! Click the police officer you want to eliminate." : `Crew ${piece.num} escaped. Waiting for them to choose a police target.`);
+      } else setGameMessage(crewChoices.mode === "multiplayer" ? `Crew ${piece.num} escaped through the door.` : "The crew escaped through the door!");
     }
   }
   declareWinnerIfOver(); finishPieceAction(piece.id, boardState.winner ? null : undefined);
@@ -1034,7 +1079,8 @@ function declareWinnerIfOver() {
     setGameMessage("A crew member was caught. Police win!");
     return true;
   }
-  if (sidePieces("crew").length) return false;
+  if (boardState.eliminationPending) return false;
+  if (sidePieces("crew").length && sidePieces("police").length) return false;
   boardState.winner = "crew";
   setGameMessage("The crew made it out. Crew wins!");
   return true;
@@ -1062,6 +1108,10 @@ function finishPieceAction(pieceId, message) {
   boardState.actedIds.add(pieceId); boardState.selectedId = null; boardState.barricadeMode = false; boardState.barricadeAnchor = null;
   if (message) setGameMessage(message);
   if (boardState.winner) { broadcastBoardSnapshot(); renderLiveBoard(); showVictoryScreen(); return; }
+  if (boardState.eliminationPending) { renderLiveBoard(); broadcastBoardSnapshot(); return; }
+  advanceAfterAction();
+}
+function advanceAfterAction() {
   const oldSide = boardState.activeSide;
   const left = boardState.phaseIds.some((id) => sidePieces(oldSide).some((p) => p.id === id) && !boardState.actedIds.has(id));
   if (left) { renderLiveBoard(); if (isComputerTurn()) scheduleComputerMove(); }
