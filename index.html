@@ -112,7 +112,7 @@
             <select id="police-player-count" class="room-size-select"><option>1</option><option>2</option><option selected>3</option></select></label>
         </div>
         <label class="field-label" for="room-password">PASSWORD (OPTIONAL)</label>
-        <input id="room-password" class="text-input" type="password" maxlength="32" autocomplete="new-password" placeholder="Leave empty for an open room">
+        <input id="room-password" class="text-input" type="password" autocomplete="new-password" placeholder="Leave empty for an open room">
         <div class="crew-actions"><button class="button button-play" id="create-room-confirm" type="button">Create room</button></div>
         <p class="crew-status" id="create-status" role="status" aria-live="polite"></p>
       </div>
@@ -131,7 +131,7 @@
         <ul class="room-list" id="live-rooms"></ul>
         <div class="join-selected" id="join-selected" hidden>
           <p class="field-label" id="join-selected-label"></p>
-          <input id="join-password" class="text-input" type="password" maxlength="32" autocomplete="off" placeholder="Room password" hidden>
+          <input id="join-password" class="text-input" type="password" autocomplete="off" placeholder="Room password" hidden>
           <div class="crew-actions"><button class="button button-play" id="join-room-confirm" type="button">Join room</button></div>
         </div>
         <p class="crew-status" id="join-status" role="status" aria-live="polite">Connecting to live rooms…</p>
