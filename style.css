@@ -568,17 +568,15 @@ html[data-sound="on"] .sound-toggle { border-color: var(--red); color: var(--red
 }
 
 /* Barricades sit on the line between two squares. */
-.play-cell.wall-top::before,
-.play-cell.wall-left::before {
-  content: "";
+.play-cell .wall-bar {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   background: var(--red-hot);
   box-shadow: 0 0 10px rgba(255, 65, 54, 0.8);
   pointer-events: none;
 }
-.play-cell.wall-top::before { top: -3px; left: 0; right: 0; height: 5px; }
-.play-cell.wall-left::before { left: -3px; top: 0; bottom: 0; width: 5px; }
+.play-cell .wall-bar.wall-top { top: -3px; left: -3px; right: -3px; height: 5px; }
+.play-cell .wall-bar.wall-left { left: -3px; top: -3px; bottom: -3px; width: 5px; }
 
 /* Pieces — sized from the board width so 9x9 through 21x21 all fit. */
 .play-token {

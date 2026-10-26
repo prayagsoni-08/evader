@@ -13,7 +13,9 @@ const playScreen = document.getElementById("play-screen");
 const liveBoard = document.getElementById("live-board");
 const roomStatus = document.getElementById("room-status");
 const crewChoices = { role: null, mode: null };
-let selectedBoardSize = 9;
+let selectedBoardSize = 7;
+// 2 players -> 7x7, 3-4 players -> 10x10, 5-6 players -> 12x12
+function boardSizeForPlayers(total) { return total <= 2 ? 7 : total <= 4 ? 10 : 12; }
 let selectedCrewCount = 3;
 let selectedPoliceCount = 3;
 let currentRoomCode = "";
@@ -151,10 +153,10 @@ document.getElementById("mode-join").addEventListener("click", () => {
 });
 
 function boardSizeForSetup() {
-  if (crewChoices.mode !== "multiplayer" || !roomConfig) { selectedCrewCount = 1; selectedPoliceCount = 1; return 9; }
+  if (crewChoices.mode !== "multiplayer" || !roomConfig) { selectedCrewCount = 1; selectedPoliceCount = 1; return boardSizeForPlayers(2); }
   selectedCrewCount = roomConfig.crewCount;
   selectedPoliceCount = roomConfig.policeCount;
-  return 3 * (selectedCrewCount + selectedPoliceCount) + 3; // total 2 -> 9x9, total 4 -> 15x15
+  return boardSizeForPlayers(selectedCrewCount + selectedPoliceCount);
 }
 function showBriefing() {
   selectedBoardSize = boardSizeForSetup();
@@ -365,7 +367,7 @@ function applyRoomConfig(config) {
   if (config.crewCount < 1 || config.crewCount > 3 || config.policeCount < 1 || config.policeCount > 3) return;
   roomConfig = { crewCount: config.crewCount, policeCount: config.policeCount, totalPlayers: config.crewCount + config.policeCount };
   selectedCrewCount = config.crewCount; selectedPoliceCount = config.policeCount;
-  selectedBoardSize = 3 * (selectedCrewCount + selectedPoliceCount) + 3;
+  selectedBoardSize = boardSizeForPlayers(selectedCrewCount + selectedPoliceCount);
 }
 function currentRoomPlayers() {
   if (!activeRoomChannel) return [];
@@ -563,7 +565,13 @@ function boardConnected() {
 }
 function myUnactedPieces() {
   const side = boardState.activeSide;
-  return sidePieces(side).filter((p) => boardState.phaseIds.includes(p.id) && !boardState.actedIds.has(p.id) && (crewChoices.mode !== "multiplayer" || p.owner === roomPlayerId));
+  const next = nextActingPiece();
+  return next && (crewChoices.mode !== "multiplayer" || next.owner === roomPlayerId) ? [next] : [];
+}
+// Team members act one after another (by player number), so two players can never overwrite each other's moves.
+function nextActingPiece() {
+  const live = sidePieces(boardState.activeSide);
+  return boardState.phaseIds.map((id) => live.find((p) => p.id === id)).find((p) => p && !boardState.actedIds.has(p.id)) || null;
 }
 function sidePieces(side) { return boardState[side].filter((piece) => side === "crew" ? !piece.captured && !piece.escaped : !piece.captured); }
 function pieceAt(row, col) { return ["crew", "police"].flatMap((side) => sidePieces(side).map((piece) => ({ side, piece }))).find(({ piece }) => piece.row === row && piece.col === col) || null; }
@@ -597,7 +605,7 @@ function selectedHumanSide() { return crewChoices.role || "crew"; }
 function isComputerTurn() { return crewChoices.mode === "single-player" && boardState.activeSide !== selectedHumanSide(); }
 function isRemoteTurn() { return crewChoices.mode === "multiplayer" && Boolean(activeRoomChannel) && (boardState.activeSide !== selectedHumanSide() || !myUnactedPieces().length); }
 function isPieceTurn(side, piece) {
-  return !boardState.winner && boardState.activeSide === side && boardState.phaseIds.includes(piece.id) && !boardState.actedIds.has(piece.id);
+  return !boardState.winner && boardState.activeSide === side && nextActingPiece()?.id === piece.id;
 }
 function renderLiveBoard() {
   liveBoard.replaceChildren();
@@ -623,6 +631,7 @@ function renderLiveBoard() {
     if (row > 0 && blocked({ row, col }, { row: row - 1, col })) wallClasses.push("wall-top");
     if (col > 0 && blocked({ row, col }, { row, col: col - 1 })) wallClasses.push("wall-left");
     if (wallClasses.length) cell.classList.add(...wallClasses);
+    wallClasses.forEach((cls) => { const bar = document.createElement("i"); bar.className = `wall-bar ${cls}`; bar.setAttribute("aria-hidden", "true"); cell.append(bar); });
     let token = null;
     const isDoor = row === door.row && col === door.col;
     if (isDoor) cell.classList.add("door-cell", `door-${door.side}`);
@@ -698,8 +707,9 @@ function skipUnavailableActions() {
     else beginTeamPhase(boardState.activeSide === "crew" ? "police" : "crew");
     return;
   }
-  if (!unacted.some((id) => legalMoves(sidePieces(boardState.activeSide).find((p) => p.id === id), boardState.activeSide).length)) {
-    unacted.forEach((id) => boardState.actedIds.add(id));
+  const upNext = nextActingPiece();
+  if (upNext && !legalMoves(upNext, boardState.activeSide).length) {
+    boardState.actedIds.add(upNext.id);
     skipUnavailableActions(); return;
   }
   consecutiveSkips = 0;
@@ -811,9 +821,15 @@ function movePiece(piece, side, destination) {
   declareWinnerIfOver(); finishPieceAction(piece.id, boardState.winner ? null : undefined);
 }
 function declareWinnerIfOver() {
-  if (boardState.winner || sidePieces("crew").length) return false;
-  boardState.winner = boardState.crew.some((p) => p.escaped) ? "crew" : "police";
-  setGameMessage(boardState.winner === "crew" ? "The crew made it out. Crew wins!" : "Every crew member was caught. Police win!");
+  if (boardState.winner) return false;
+  if (boardState.crew.some((p) => p.captured)) {
+    boardState.winner = "police";
+    setGameMessage("A crew member was caught. Police win!");
+    return true;
+  }
+  if (sidePieces("crew").length) return false;
+  boardState.winner = "crew";
+  setGameMessage("The crew made it out. Crew wins!");
   return true;
 }
 function showVictoryScreen() {
@@ -826,7 +842,7 @@ function showVictoryScreen() {
   document.getElementById("victory-title").innerHTML = `${sideName}<br><span>${iWon ? "WINS" : "LOSES"}</span>`;
   document.getElementById("victory-copy").textContent = crewWon
     ? (mySide === "crew" ? "You reached the door and escaped." : "The crew reached the door. The police were too slow.")
-    : (mySide === "police" ? "Every crew member was caught. You stopped the heist." : "The whole crew was caught. The heist failed.");
+    : (mySide === "police" ? "You caught a crew member. You stopped the heist." : "A crew member was caught. The heist failed.");
   const replayButton = document.getElementById("play-again");
   replayButton.disabled = crewChoices.mode === "multiplayer" && !isRoomHost;
   replayButton.textContent = replayButton.disabled ? "Waiting for host" : "Play again";
