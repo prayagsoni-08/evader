@@ -168,7 +168,7 @@ function showBriefing() {
   roomDetails.textContent = crewChoices.mode === "multiplayer" ? `ROOM ${currentRoomCode || "LOCAL"} · ${selectedCrewCount} heist crew + ${selectedPoliceCount} police = ${selectedCrewCount + selectedPoliceCount} total players.` : "";
   const beginButton = document.getElementById("begin-operation");
   beginButton.disabled = crewChoices.mode === "multiplayer" && !isRoomHost;
-  beginButton.innerHTML = crewChoices.mode === "multiplayer" && !isRoomHost ? "Waiting for host" : 'Begin operation <span class="button-arrow" aria-hidden="true">↗</span>';
+  beginButton.innerHTML = crewChoices.mode === "multiplayer" && !isRoomHost ? "Waiting for host" : "Begin operation";
   document.getElementById("back-to-crew").focus();
 }
 
@@ -820,7 +820,7 @@ function showVictoryScreen() {
   if (!boardState.winner) return;
   const crewWon = boardState.winner === "crew", mySide = selectedHumanSide(), iWon = boardState.winner === mySide;
   const art = document.getElementById("victory-art");
-  art.style.backgroundImage = `url("assets/${crewWon ? "crew-victory.jpg" : "police-victory.jpg"}")`;
+  art.style.backgroundImage = `url("assets/${crewWon ? "crewvictory.png" : "policevictory.png"}")`;
   art.setAttribute("aria-label", crewWon ? "The heist crew celebrates their escape" : "The police have stopped the heist crew");
   const sideName = mySide === "crew" ? "CREW" : "POLICE";
   document.getElementById("victory-title").innerHTML = `${sideName}<br><span>${iWon ? "WINS" : "LOSES"}</span>`;

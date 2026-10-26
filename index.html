@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Special+Elite&display=swap">
-  <link rel="preload" as="image" href="assets/heist-hostage-scene.jpg" media="(min-width: 46.01rem)">
-  <link rel="preload" as="image" href="assets/heist-hostage-scene.jpg" media="(max-width: 46rem)">
+  <link rel="preload" as="image" href="assets/page1.png" media="(min-width: 46.01rem)">
+  <link rel="preload" as="image" href="assets/page1.png" media="(max-width: 46rem)">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
   <script src="supabase-config.js" defer></script>
@@ -46,10 +46,10 @@
         </button>
         <button class="button button-about" id="about-button" type="button">About</button>
       </nav>
-      <p class="edition">A GAME OF STRATEGY &amp; ESCAPE <span aria-hidden="true">•</span> 01</p>
+      <p class="edition"><span aria-hidden="true"></span></p>
     </section>
 
-    <div class="bottom-mark" aria-hidden="true"><span></span> PLAN IT. TRUST THE CREW. GET OUT. <span></span></div>
+    
     <p class="screen-reader-status" id="status-message" role="status" aria-live="polite"></p>
   </main>
 
@@ -233,10 +233,16 @@
     <button class="dialog-close" id="close-about" type="button" aria-label="Close About">×</button>
     <div class="about-image" role="img" aria-label="The Professor holding a Salvador Dalí mask"></div>
     <div class="about-copy">
-      <p class="dialog-kicker">THE PLAN</p>
-      <h2 id="about-title">About the game</h2>
-      <p>Lead a crew through a high-stakes bank heist. Outsmart the police, secure the cash, and find a way out together.</p>
-      <p class="about-note">This is a strategy game about timing, teamwork, and a very good plan.</p>
+      <p class="dialog-kicker">THE RULES</p>
+      <h2 id="about-title">How to play</h2>
+      <ol class="rules-list">
+        <li><b>Turns</b><span>Crew moves first, then police. Each unit acts once per round.</span></li>
+        <li><b>Move</b><span>One square: up, down, left or right.</span></li>
+        <li><b>Crew</b><span>Step on $ to move the door and cash. Reach the door to escape.</span></li>
+        <li><b>Police</b><span>Step on a crew member to catch them.</span></li>
+        <li><b>Walls</b><span>Police can drag a wall onto the board instead of moving.</span></li>
+        <li><b>Win</b><span>Crew: escape through the door. Police: catch every crew member.</span></li>
+      </ol>
       <button class="button button-play dialog-done" id="done-about" type="button">Back to the plan</button>
     </div>
   </dialog>
