@@ -144,15 +144,18 @@
       <span class="operation-label">MULTIPLAYER <i>/</i> LOBBY</span>
     </header>
     <div class="lobby-content">
-      <p class="panel-kicker"><span></span> ROOM CODE</p>
-      <h1 id="lobby-title"><span id="created-room-code">-----</span></h1>
+      <p class="lobby-host" id="lobby-host">ROOM</p>
+      <h1 id="lobby-title"><small>CODE</small> <span id="created-room-code">-----</span></h1>
       <div class="team-split">
-        <section class="team-col"><h2>HEIST CREW <small id="crew-slot-count"></small></h2><ul class="slot-list" id="crew-slots"></ul><button class="button button-about" id="join-crew-side" type="button">Join crew</button></section>
-        <section class="team-col"><h2>POLICE <small id="police-slot-count"></small></h2><ul class="slot-list" id="police-slots"></ul><button class="button button-about" id="join-police-side" type="button">Join police</button></section>
+        <section class="team-col"><h2>HEIST CREW <small id="crew-slot-count"></small></h2><ul class="slot-list" id="crew-slots"></ul></section>
+        <section class="team-col"><h2>POLICE <small id="police-slot-count"></small></h2><ul class="slot-list" id="police-slots"></ul></section>
       </div>
-      <div class="lobby-start"><button class="button button-play" id="start-room" type="button" disabled>Start game</button></div>
-      <p class="room-player-status" id="room-player-status" role="status" aria-live="polite"></p>
       <p class="room-status" id="room-status" role="status" aria-live="polite"></p>
+      <div class="lobby-actions">
+        <button class="button button-about" id="slot-action" type="button" disabled>Tap a slot</button>
+        <button class="button button-play" id="start-room" type="button" disabled>Start game</button>
+      </div>
+      <p class="room-player-status" id="room-player-status" role="status" aria-live="polite"></p>
     </div>
   </section>
   <section class="game-screen" id="game-screen" aria-labelledby="selected-side-title" hidden>
@@ -170,6 +173,12 @@
         <h3>OBJECTIVE</h3>
         <p class="objective-copy" id="objective-copy">Secure the cash and make it to an exit before the police close in.</p>
         <p class="briefing-room-details" id="briefing-room-details" hidden></p>
+        <div class="map-legend brief-legend" aria-label="Map key">
+          <div><span class="legend-piece ally-piece">1</span> YOUR TEAM</div>
+          <div><span class="legend-piece enemy-piece">1</span> OPPONENTS</div>
+          <div><span class="legend-piece cash-piece">$</span> CASH</div>
+          <div><span class="legend-door"></span> EXIT DOOR</div>
+        </div>
         <button class="button button-play begin-button" id="begin-operation" type="button">Begin operation</button>
         <p class="game-status" id="game-status" role="status" aria-live="polite">The vault is ready. Begin the operation.</p>
       </aside>
@@ -177,33 +186,22 @@
   </section>
   <section class="play-screen" id="play-screen" aria-labelledby="play-title" hidden>
     <header class="play-topbar">
-      <button class="back-link" id="back-to-briefing" type="button"><span aria-hidden="true">←</span> BRIEFING</button>
+      <button class="back-link" id="back-to-briefing" type="button"><span aria-hidden="true">←</span> BACK</button>
       <span class="operation-label">OPERATION 01 <i>/</i> LIVE</span>
     </header>
-    <div class="play-layout">
-      <section class="live-board-column" aria-label="Live bank heist board">
-      <div class="live-board-heading">
-          <div><p class="board-kicker">THE BANK VAULT</p><h1 id="play-title">MAKE YOUR <span>MOVE</span></h1></div>
-          <span class="grid-size" id="live-grid-size">09 <i>×</i> 09</span>
-        </div>
-        <div class="game-board-frame live-frame">
-          <div class="live-board" id="live-board" role="group" aria-label="Interactive 9 by 9 heist board"></div>
-        </div>
-      </section>
-      <aside class="live-panel">
-        <p class="panel-kicker"><span></span> PLAYERS</p>
-        <div class="roster" id="roster" aria-label="Players"></div>
-        <div class="mission-rule"></div>
-        <div class="map-legend">
-          <div><span class="legend-piece ally-piece">1</span> YOUR TEAM</div>
-          <div><span class="legend-piece enemy-piece">1</span> OPPONENTS</div>
-          <div><span class="legend-piece cash-piece">$</span> CASH</div>
-          <div><span class="legend-door"></span> EXIT DOOR</div>
-        </div>
-        <p class="live-message" id="live-message" role="status" aria-live="polite">Crew moves first.</p>
-        <button class="button button-about restart-button" id="barricade-toggle" type="button" aria-pressed="false" hidden>Build a wall</button>
-        <button class="button button-about restart-button" id="restart-operation" type="button">Restart operation</button>
-      </aside>
+    <h1 id="play-title" class="sr-only">Make your move</h1>
+    <div class="roster" id="roster" aria-label="Players"></div>
+    <div class="board-area">
+      <div class="game-board-frame live-frame" id="live-frame">
+        <div class="live-board" id="live-board" role="group" aria-label="Interactive heist board"></div>
+        <div class="wall-shadow" id="wall-shadow" hidden></div>
+      </div>
+    </div>
+    <p class="live-message" id="live-message" role="status" aria-live="polite">Crew moves first.</p>
+    <div class="wall-tray" id="wall-tray" hidden>
+      <span class="wall-tray-label">DRAG A WALL<br>ONTO THE BOARD</span>
+      <button class="wall-chip" id="wall-h" data-orient="h" type="button" aria-label="Horizontal wall, drag onto the board"><i class="bar bar-h"></i></button>
+      <button class="wall-chip" id="wall-v" data-orient="v" type="button" aria-label="Vertical wall, drag onto the board"><i class="bar bar-v"></i></button>
     </div>
   </section>
   <section class="victory-screen" id="victory-screen" aria-labelledby="victory-title" hidden>
@@ -222,6 +220,15 @@
       </div>
     </div>
   </section>
+  <dialog class="leave-dialog" id="leave-dialog" aria-labelledby="leave-title">
+    <h2 id="leave-title">LEAVE <span>MATCH?</span></h2>
+    <p id="leave-copy">The match is still running. If you leave now, your progress is lost.</p>
+    <div class="leave-actions">
+      <button class="button button-about" id="leave-stay" type="button">Stay</button>
+      <button class="button button-play" id="leave-confirm" type="button">Leave</button>
+    </div>
+  </dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <dialog class="about-dialog" id="about-dialog" aria-labelledby="about-title">
     <button class="dialog-close" id="close-about" type="button" aria-label="Close About">×</button>
     <div class="about-image" role="img" aria-label="The Professor holding a Salvador Dalí mask"></div>

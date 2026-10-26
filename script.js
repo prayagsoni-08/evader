@@ -22,6 +22,8 @@ let activeRoomChannel = null;
 let isRoomHost = false;
 let roomPlayerId = window.crypto?.randomUUID ? window.crypto.randomUUID() : `player-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let roomConfig = null;
+let mySlot = 0;
+let lobbySel = null; // { type: "move", side, index } or { type: "kick", playerId }
 
 // ---------- Audio: looping background track + click sound ----------
 const bgMusic = new Audio("bellachao.m4a");
@@ -93,6 +95,11 @@ function showScreen(target) {
   landingScreen.hidden = target !== landingScreen;
   window.scrollTo(0, 0);
 }
+let toastTimer = null;
+function toast(message) {
+  const el = document.getElementById("toast"); el.textContent = message; el.hidden = false;
+  window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { el.hidden = true; }, 3500);
+}
 document.querySelectorAll("[data-back]").forEach((btn) => btn.addEventListener("click", () => showScreen(document.getElementById(btn.dataset.back))));
 
 // ---------- Page 2: player name ----------
@@ -154,8 +161,8 @@ function showBriefing() {
   showScreen(gameScreen);
   document.getElementById("selected-side-title").innerHTML = crewChoices.role === "crew" ? "HEIST<br><span>CREW</span>" : "THE<br><span>POLICE</span>";
   document.getElementById("selected-mode").textContent = crewChoices.mode === "single-player" ? "SINGLE PLAYER" : `ONLINE ROOM ${currentRoomCode} · ${selectedCrewCount} CREW + ${selectedPoliceCount} POLICE · ${selectedBoardSize}×${selectedBoardSize}`;
-  document.getElementById("objective-copy").textContent = "The crew moves as a team, gathers the cash, and must get every member out. Police can catch crew or barricade a passage.";
-  gameStatus.textContent = "Board layout ready. The crew team takes the first phase.";
+  document.getElementById("objective-copy").textContent = "Crew: grab the cash and get everyone out through the door. Police: catch the crew, or drag a wall onto the board to block a path.";
+  gameStatus.textContent = "Crew moves first. On your turn, your moves light up on their own.";
   const roomDetails = document.getElementById("briefing-room-details");
   roomDetails.hidden = crewChoices.mode !== "multiplayer";
   roomDetails.textContent = crewChoices.mode === "multiplayer" ? `ROOM ${currentRoomCode || "LOCAL"} · ${selectedCrewCount} heist crew + ${selectedPoliceCount} police = ${selectedCrewCount + selectedPoliceCount} total players.` : "";
@@ -210,6 +217,7 @@ function liveRooms() {
   return Object.values(lobbyChannel.presenceState()).flat().map((p) => p.room).filter((r) => {
     if (!r || !/^[A-Z0-9]{5}$/.test(r.code) || seen.has(r.code)) return false;
     if (![r.crew, r.police].every((n) => Number.isInteger(n) && n >= 1 && n <= 3)) return false;
+    r.host = cleanName(r.host) || "Host";
     seen.add(r.code); return true;
   });
 }
@@ -227,8 +235,8 @@ function renderLiveRooms() {
   rooms.forEach((room) => {
     const li = document.createElement("li"); const btn = document.createElement("button");
     btn.type = "button"; btn.className = "room-row"; btn.setAttribute("aria-pressed", String(selectedRoom?.code === room.code));
-    const left = document.createElement("span"); left.textContent = `${room.code}${room.hasPw ? " 🔒" : ""}`;
-    const right = document.createElement("span"); right.textContent = `${room.crew} CREW + ${room.police} POLICE · ${Math.min(Number(room.players) || 0, 6)}/${room.crew + room.police}`;
+    const left = document.createElement("span"); left.className = "room-host"; left.textContent = `${room.host}'s room${room.hasPw ? " 🔒" : ""}`;
+    const right = document.createElement("span"); right.className = "room-meta"; right.textContent = `${room.code} · ${room.crew} CREW + ${room.police} POLICE · ${Math.min(Number(room.players) || 0, 6)}/${room.crew + room.police}`;
     btn.append(left, right); btn.addEventListener("click", () => selectRoom(room)); li.append(btn); list.append(li);
   });
   document.getElementById("join-status").textContent = rooms.length ? "Pick a room to join." : (query ? `No live room matches “${query}”.` : "No live rooms right now. Ask a host to create one.");
@@ -236,7 +244,7 @@ function renderLiveRooms() {
 function selectRoom(room) {
   selectedRoom = room;
   document.getElementById("join-selected").hidden = false;
-  document.getElementById("join-selected-label").textContent = `ROOM ${room.code}${room.hasPw ? " · PASSWORD REQUIRED" : ""}`;
+  document.getElementById("join-selected-label").textContent = `${room.host}'S ROOM${room.hasPw ? " · PASSWORD REQUIRED" : ""}`;
   const pw = document.getElementById("join-password"); pw.hidden = !room.hasPw; pw.value = "";
   renderLiveRooms();
   (room.hasPw ? pw : document.getElementById("join-room-confirm")).focus();
@@ -253,14 +261,14 @@ document.getElementById("create-room-confirm").addEventListener("click", async (
     await openLobby();
     const taken = new Set(liveRooms().map((r) => r.code));
     let code; do { code = randomString(5, ROOM_CODE_ALPHABET); } while (taken.has(code));
-    const room = { code, crew, police, hasPw: Boolean(password) };
+    const room = { code, crew, police, hasPw: Boolean(password), host: cleanName(playerName) || "Host" };
     roomChannelKey = "";
     if (password) {
       room.salt = randomString(16, ROOM_CODE_ALPHABET);
       room.check = await sha(`${room.salt}:check:${password}`);
       roomChannelKey = (await sha(`${room.salt}:chan:${password}`)).slice(0, 24);
     }
-    hostRoomInfo = room; currentRoomCode = code; isRoomHost = true; crewChoices.role = "crew";
+    hostRoomInfo = room; currentRoomCode = code; isRoomHost = true; crewChoices.role = "crew"; mySlot = 0; lobbySel = null;
     roomConfig = { crewCount: crew, policeCount: police, totalPlayers: crew + police };
     await connectToRoom(code, true);
     document.getElementById("room-password").value = "";
@@ -295,8 +303,7 @@ document.getElementById("join-room-confirm").addEventListener("click", async () 
 
 // ----- Lobby -----
 document.getElementById("back-to-setup").addEventListener("click", async () => { await leaveRoom(); showScreen(modeScreen); });
-document.getElementById("join-crew-side").addEventListener("click", () => switchSide("crew"));
-document.getElementById("join-police-side").addEventListener("click", () => switchSide("police"));
+document.getElementById("slot-action").addEventListener("click", confirmSlotAction);
 document.getElementById("start-room").addEventListener("click", async () => {
   if (!isRoomHost || document.getElementById("start-room").disabled) return;
   try { await broadcastRoom("room-start", getRoomConfig()); }
@@ -304,18 +311,43 @@ document.getElementById("start-room").addEventListener("click", async () => {
   showBriefing();
 });
 function trackSelf() {
-  return activeRoomChannel.track({ playerId: roomPlayerId, name: cleanName(playerName) || "Player", role: crewChoices.role, host: isRoomHost, joinedAt: roomJoinedAt });
+  return activeRoomChannel.track({ playerId: roomPlayerId, name: cleanName(playerName) || "Player", role: crewChoices.role, slot: mySlot, host: isRoomHost, joinedAt: roomJoinedAt });
 }
-async function switchSide(side) {
-  if (!activeRoomChannel || crewChoices.role === side) return;
-  const cap = side === "crew" ? roomConfig.crewCount : roomConfig.policeCount;
-  const taken = currentRoomPlayers().filter((p) => p.role === side && p.playerId !== roomPlayerId).length;
-  if (taken >= cap) { roomStatus.textContent = "That side is full."; return; }
-  crewChoices.role = side;
-  try { await trackSelf(); } catch { roomStatus.textContent = "Could not switch sides."; }
+const byJoinTime = (a, b) => String(a.joinedAt).localeCompare(String(b.joinedAt));
+// Every client computes the same slot layout from presence: earliest joiner wins a contested slot.
+function computeSlots() {
+  const out = { crew: Array(roomConfig.crewCount).fill(null), police: Array(roomConfig.policeCount).fill(null) };
+  const later = [];
+  currentRoomPlayers().sort(byJoinTime).forEach((p) => {
+    const list = out[p.role]; if (!list) return;
+    if (Number.isInteger(p.slot) && p.slot >= 0 && p.slot < list.length && !list[p.slot]) list[p.slot] = p; else later.push(p);
+  });
+  later.forEach((p) => { const list = out[p.role]; const i = list ? list.indexOf(null) : -1; if (i >= 0) list[i] = p; });
+  return out;
+}
+function slotNameOf(playerId) { return cleanName(currentRoomPlayers().find((p) => p.playerId === playerId)?.name) || "Player"; }
+function clearLobbySel() { lobbySel = null; renderSlots(); }
+function onSlotTap(side, index, player) {
+  if (!player) lobbySel = { type: "move", side, index };
+  else if (player.playerId === roomPlayerId) lobbySel = null;
+  else if (isRoomHost) lobbySel = lobbySel?.playerId === player.playerId ? null : { type: "kick", playerId: player.playerId };
+  else return;
+  renderSlots();
+}
+async function confirmSlotAction() {
+  const sel = lobbySel; if (!sel || !activeRoomChannel) return;
+  if (sel.type === "move") {
+    if (computeSlots()[sel.side][sel.index]) { roomStatus.textContent = "Someone just took that slot."; clearLobbySel(); return; }
+    crewChoices.role = sel.side; mySlot = sel.index; lobbySel = null;
+    try { await trackSelf(); } catch { roomStatus.textContent = "Could not change position."; }
+  } else if (sel.type === "kick" && isRoomHost) {
+    const name = slotNameOf(sel.playerId); lobbySel = null; renderSlots();
+    try { await broadcastRoom("kick", { targetId: sel.playerId }); roomStatus.textContent = `${name} was removed from the room.`; }
+    catch (error) { roomStatus.textContent = error.message; }
+  }
 }
 function resetRoomUI() {
-  currentRoomCode = ""; isRoomHost = false; roomConfig = null; hostRoomInfo = null; roomChannelKey = ""; selectedRoom = null;
+  currentRoomCode = ""; isRoomHost = false; roomConfig = null; mySlot = 0; lobbySel = null; hostRoomInfo = null; roomChannelKey = ""; selectedRoom = null;
   document.getElementById("created-room-code").textContent = "-----";
   const startButton = document.getElementById("start-room"); startButton.textContent = "Start game"; startButton.disabled = true;
   document.getElementById("room-player-status").textContent = ""; roomStatus.textContent = "";
@@ -346,23 +378,35 @@ async function broadcastRoom(event, payload) {
   if (result !== "ok") throw new Error("Could not send an update to the room. Check the connection and try again.");
 }
 function renderSlots() {
-  const players = currentRoomPlayers().sort((a, b) => String(a.joinedAt).localeCompare(String(b.joinedAt)));
-  [["crew", roomConfig.crewCount], ["police", roomConfig.policeCount]].forEach(([side, cap]) => {
+  if (!roomConfig) return;
+  const slots = computeSlots();
+  if (lobbySel?.type === "move" && slots[lobbySel.side][lobbySel.index]) lobbySel = null;
+  if (lobbySel?.type === "kick" && !currentRoomPlayers().some((p) => p.playerId === lobbySel.playerId)) lobbySel = null;
+  ["crew", "police"].forEach((side) => {
     const list = document.getElementById(`${side}-slots`); list.replaceChildren();
-    const mine = players.filter((p) => p.role === side);
-    for (let i = 0; i < Math.max(cap, mine.length); i++) {
-      const li = document.createElement("li"), p = mine[i];
-      li.className = p ? "slot filled" : "slot";
-      li.textContent = p ? `${cleanName(p.name) || "Player"}${p.host ? " ★ HOST" : ""}${p.playerId === roomPlayerId ? " (you)" : ""}` : "Waiting for player…";
-      list.append(li);
-    }
-    document.getElementById(`${side}-slot-count`).textContent = `${mine.length}/${cap}`;
+    slots[side].forEach((p, i) => {
+      const li = document.createElement("li"), btn = document.createElement("button");
+      btn.type = "button";
+      const picked = lobbySel && ((lobbySel.type === "move" && lobbySel.side === side && lobbySel.index === i) || (lobbySel.type === "kick" && p && lobbySel.playerId === p.playerId));
+      btn.className = `slot${p ? " filled" : ""}${p?.playerId === roomPlayerId ? " mine" : ""}${picked ? ` picked${lobbySel.type === "kick" ? " kick" : ""}` : ""}`;
+      btn.textContent = p ? `${cleanName(p.name) || "Player"}${p.host ? " ★" : ""}${p.playerId === roomPlayerId ? " (you)" : ""}` : "Open";
+      btn.disabled = Boolean(p) && p.playerId !== roomPlayerId && !isRoomHost;
+      btn.setAttribute("aria-pressed", String(Boolean(picked)));
+      btn.addEventListener("click", () => onSlotTap(side, i, p));
+      li.append(btn); list.append(li);
+    });
+    document.getElementById(`${side}-slot-count`).textContent = `${slots[side].filter(Boolean).length}/${slots[side].length}`;
   });
+  const action = document.getElementById("slot-action");
+  action.disabled = !lobbySel; action.classList.toggle("danger", lobbySel?.type === "kick");
+  action.textContent = !lobbySel ? (isRoomHost ? "Tap a slot" : "Tap an open slot") : lobbySel.type === "move" ? "Confirm move" : `Kick ${slotNameOf(lobbySel.playerId)}`;
 }
 function updateRoomPresence() {
   if (!roomConfig) return;
   renderSlots();
   const players = currentRoomPlayers();
+  const host = players.find((p) => p.host);
+  document.getElementById("lobby-host").textContent = `${(cleanName(host?.name) || "Host").toUpperCase()}'S ROOM`;
   const crewN = players.filter((p) => p.role === "crew").length, policeN = players.filter((p) => p.role === "police").length;
   document.getElementById("room-player-status").textContent = `${players.length}/${roomConfig.totalPlayers} connected`;
   if (isRoomHost) {
@@ -370,7 +414,7 @@ function updateRoomPresence() {
     const startButton = document.getElementById("start-room");
     startButton.disabled = !full;
     startButton.title = full ? "Start the match" : "Fill every crew and police slot to start";
-    roomStatus.textContent = full ? "Everyone is in. Start the game." : "Waiting for players to fill both sides…";
+    roomStatus.textContent = full ? "Everyone is in. Start the game." : "Waiting for players…";
     announceRoom();
   } else document.getElementById("start-room").textContent = "Waiting for host";
 }
@@ -385,6 +429,11 @@ async function connectToRoom(code, host) {
     .on("broadcast", { event: "room-start" }, ({ payload }) => {
       if (isRoomHost || !isFromHost(payload)) return;
       applyRoomConfig(payload); showBriefing(); roomStatus.textContent = "The host opened the match briefing.";
+    })
+    .on("broadcast", { event: "kick" }, async ({ payload }) => {
+      if (isRoomHost || !isFromHost(payload) || payload.targetId !== roomPlayerId) return;
+      await leaveRoom(); showScreen(joinScreen); renderLiveRooms();
+      toast("The host removed you from the room.");
     })
     .on("broadcast", { event: "game-start" }, ({ payload }) => {
       if (isRoomHost || !isFromHost(payload)) return;
@@ -406,11 +455,11 @@ async function connectToRoom(code, host) {
         try {
           if (!host) { // let presence sync, then take a free slot (crew first)
             await new Promise((r) => window.setTimeout(r, 600));
-            const players = currentRoomPlayers();
-            const crewN = players.filter((p) => p.role === "crew").length, policeN = players.filter((p) => p.role === "police").length;
-            if (!players.some((p) => p.host)) throw new Error("No active host found for this room. It may have closed.");
-            if (crewN < roomConfig.crewCount) crewChoices.role = "crew";
-            else if (policeN < roomConfig.policeCount) crewChoices.role = "police";
+            if (!currentRoomPlayers().some((p) => p.host)) throw new Error("No active host found for this room. It may have closed.");
+            const free = computeSlots();
+            let i = free.crew.indexOf(null);
+            if (i >= 0) { crewChoices.role = "crew"; mySlot = i; }
+            else if ((i = free.police.indexOf(null)) >= 0) { crewChoices.role = "police"; mySlot = i; }
             else throw new Error("This room is full.");
           }
           if (await trackSelf() !== "ok") throw new Error("Could not join the room.");
@@ -432,7 +481,6 @@ document.getElementById("begin-operation").addEventListener("click", () => {
   if (crewChoices.mode === "multiplayer" && (!isRoomHost || !activeRoomChannel)) return;
   gameScreen.hidden = true; playScreen.hidden = false; startOperation(); window.scrollTo(0, 0);
   if (crewChoices.mode === "multiplayer") broadcastRoom("game-start", { state: serializeBoardSnapshot() });
-  document.getElementById("restart-operation").focus();
 });
 
 let boardState;
@@ -468,7 +516,7 @@ function rosterFor(side, count) {
     const human = selectedHumanSide() === side;
     return [{ name: human ? (cleanName(playerName) || "YOU") : "CPU", owner: human ? roomPlayerId : "cpu" }];
   }
-  const players = currentRoomPlayers().filter((p) => p.role === side).sort((a, b) => String(a.joinedAt).localeCompare(String(b.joinedAt)));
+  const players = computeSlots()[side].filter(Boolean);
   return Array.from({ length: count }, (_, i) => ({ name: cleanName(players[i]?.name) || `Player ${i + 1}`, owner: players[i]?.playerId || "" }));
 }
 function freshBoardState() {
@@ -548,16 +596,21 @@ function pathExists(from, to) {
 function selectedHumanSide() { return crewChoices.role || "crew"; }
 function isComputerTurn() { return crewChoices.mode === "single-player" && boardState.activeSide !== selectedHumanSide(); }
 function isRemoteTurn() { return crewChoices.mode === "multiplayer" && Boolean(activeRoomChannel) && (boardState.activeSide !== selectedHumanSide() || !myUnactedPieces().length); }
+function isPieceTurn(side, piece) {
+  return !boardState.winner && boardState.activeSide === side && boardState.phaseIds.includes(piece.id) && !boardState.actedIds.has(piece.id);
+}
 function renderLiveBoard() {
   liveBoard.replaceChildren();
   liveBoard.style.gridTemplateColumns = `repeat(${boardState.size}, minmax(0, 1fr))`;
   liveBoard.style.gridTemplateRows = `repeat(${boardState.size}, minmax(0, 1fr))`;
   liveBoard.style.setProperty("--n", String(boardState.size));
+  // On your own turn your piece is picked for you, so its moves are already lit.
+  if (!boardState.winner && !boardState.selectedId && !isComputerTurn() && !isRemoteTurn()) {
+    const mine = myUnactedPieces(); if (mine.length === 1) boardState.selectedId = mine[0].id;
+  }
   const focusedCell = document.activeElement?.classList?.contains("play-cell") ? { row: document.activeElement.dataset.row, col: document.activeElement.dataset.col } : null;
-  document.getElementById("live-grid-size").innerHTML = `${String(boardState.size).padStart(2, "0")} <i>×</i> ${String(boardState.size).padStart(2, "0")}`;
   const selected = sidePieces(boardState.activeSide).find((piece) => piece.id === boardState.selectedId);
-  const barricadeTargets = boardState.barricadeMode && selected ? [[-1, 0], [1, 0], [0, -1], [0, 1]].map(([dr, dc]) => ({ row: selected.row + dr, col: selected.col + dc })).filter((c) => insideBoard(c.row, c.col) && !boardState.walls.has(edgeKey(selected, c))) : [];
-  const targets = boardState.barricadeMode ? [] : selected ? legalMoves(selected, boardState.activeSide) : [];
+  const targets = selected && !isComputerTurn() && !isRemoteTurn() ? legalMoves(selected, boardState.activeSide) : [];
   const door = boardState.door, mySide = selectedHumanSide();
   for (let row = 0; row < boardState.size; row += 1) for (let col = 0; col < boardState.size; col += 1) {
     const cell = document.createElement("button"); cell.type = "button"; cell.className = "play-cell";
@@ -565,9 +618,7 @@ function renderLiveBoard() {
     const occupant = pieceAt(row, col), isSelected = occupant?.piece.id === boardState.selectedId;
     if (row === 0 || col === 0 || row === boardState.size - 1 || col === boardState.size - 1) cell.classList.add("edge-cell");
     if (isSelected) cell.classList.add("selected-cell");
-    if (boardState.barricadeAnchor?.row === row && boardState.barricadeAnchor?.col === col) cell.classList.add("barricade-anchor");
     if (targets.some((m) => m.row === row && m.col === col)) cell.classList.add("legal-cell");
-    if (barricadeTargets.some((m) => m.row === row && m.col === col)) cell.classList.add("barricade-target");
     const wallClasses = [];
     if (row > 0 && blocked({ row, col }, { row: row - 1, col })) wallClasses.push("wall-top");
     if (col > 0 && blocked({ row, col }, { row, col: col - 1 })) wallClasses.push("wall-left");
@@ -581,45 +632,41 @@ function renderLiveBoard() {
     } else if (boardState.cash.some((c) => c.row === row && c.col === col)) token = ["$", "cash-token", "Cash"];
     if (token) {
       const marker = document.createElement("span");
-      marker.className = `play-token ${token[1]}${occupant?.piece.carrying ? " carrying" : ""}`;
+      marker.className = `play-token ${token[1]}${occupant?.piece.carrying ? " carrying" : ""}${occupant && isPieceTurn(occupant.side, occupant.piece) ? " turn-glow" : ""}`;
       marker.textContent = token[0]; marker.setAttribute("aria-hidden", "true"); cell.append(marker);
     }
     const isMove = cell.classList.contains("legal-cell");
-    cell.setAttribute("aria-label", `Row ${row + 1}, column ${col + 1}${token ? `, ${token[2]}${occupant?.piece.carrying ? " carrying cash" : ""}` : ""}${isSelected ? ", selected" : ""}${isMove ? ", legal move" : ""}${cell.classList.contains("wall-top") ? ", barricade above" : ""}${cell.classList.contains("wall-left") ? ", barricade left" : ""}`);
+    cell.setAttribute("aria-label", `Row ${row + 1}, column ${col + 1}${token ? `, ${token[2]}${occupant?.piece.carrying ? " carrying cash" : ""}` : ""}${isSelected ? ", selected" : ""}${isMove ? ", legal move" : ""}${cell.classList.contains("wall-top") ? ", wall above" : ""}${cell.classList.contains("wall-left") ? ", wall left" : ""}`);
     if (isDoor) cell.setAttribute("aria-label", `${cell.getAttribute("aria-label")}, exit door`);
     liveBoard.append(cell);
   }
   if (focusedCell) liveBoard.querySelector(`.play-cell[data-row="${focusedCell.row}"][data-col="${focusedCell.col}"]`)?.focus({ preventScroll: true });
   renderRoster();
-  const barricadeButton = document.getElementById("barricade-toggle");
-  barricadeButton.hidden = Boolean(boardState.winner) || boardState.activeSide !== "police" || isComputerTurn() || isRemoteTurn();
-  barricadeButton.setAttribute("aria-pressed", String(boardState.barricadeMode));
-  barricadeButton.textContent = boardState.barricadeMode ? "Cancel wall" : "Build a wall";
+  const tray = document.getElementById("wall-tray");
+  tray.hidden = mySide !== "police";
+  tray.classList.toggle("is-off", !canBuildWall());
   playScreen.classList.toggle("game-over", Boolean(boardState.winner));
-  const restartButton = document.getElementById("restart-operation");
-  restartButton.textContent = boardState.winner ? "Play again" : "Restart operation";
-  restartButton.disabled = crewChoices.mode === "multiplayer" && !isRoomHost;
 }
 function renderRoster() {
   const mySide = selectedHumanSide(), box = document.getElementById("roster");
   box.replaceChildren();
   [[mySide, "ally", "YOUR TEAM"], [mySide === "crew" ? "police" : "crew", "enemy", "OPPONENTS"]].forEach(([side, tone, label]) => {
-    const title = document.createElement("p"); title.className = `roster-title ${tone}`; title.textContent = `${label} · ${side === "crew" ? "HEIST CREW" : "POLICE"}`; box.append(title);
+    const row = document.createElement("div"); row.className = `roster-row ${tone}`;
+    const title = document.createElement("span"); title.className = "roster-label"; title.textContent = label; row.append(title);
     boardState[side].forEach((piece) => {
       const live = sidePieces(side).includes(piece);
-      const turn = live && !boardState.winner && boardState.activeSide === side && boardState.phaseIds.includes(piece.id) && !boardState.actedIds.has(piece.id);
-      const card = document.createElement("div"); card.className = `player-card ${tone}${turn ? " active" : ""}${live ? "" : " out"}`;
+      const item = document.createElement("span"); item.className = `roster-player${isPieceTurn(side, piece) && live ? " active" : ""}${live ? "" : " out"}`;
       const num = document.createElement("b"); num.textContent = String(piece.num);
-      const name = document.createElement("span"); name.textContent = cleanName(piece.name) || `Player ${piece.num}`;
-      const state = document.createElement("em"); state.textContent = piece.escaped ? "ESCAPED" : piece.captured ? "CAUGHT" : turn ? "TURN" : "";
-      card.append(num, name, state); box.append(card);
+      item.append(num, document.createTextNode(`${cleanName(piece.name) || `Player ${piece.num}`}${piece.escaped ? " ✓" : ""}`));
+      row.append(item);
     });
+    box.append(row);
   });
 }
 function setGameMessage(message) { document.getElementById("live-message").textContent = message; }
 function serializeBoardSnapshot() {
   if (!boardState) return null;
-  return { ...boardState, walls: [...boardState.walls], phaseIds: [...boardState.phaseIds], actedIds: [...boardState.actedIds] };
+  return { ...boardState, selectedId: null, barricadeMode: false, barricadeAnchor: null, walls: [...boardState.walls], phaseIds: [...boardState.phaseIds], actedIds: [...boardState.actedIds] };
 }
 function applyBoardSnapshot(snapshot) {
   if (!snapshot) return;
@@ -663,38 +710,82 @@ function isMine(piece) { return crewChoices.mode !== "multiplayer" || piece.owne
 function handleBoardCellClick(event) {
   if (boardState.winner || isComputerTurn() || isRemoteTurn()) return;
   const row = Number(event.currentTarget.dataset.row), col = Number(event.currentTarget.dataset.col), occupant = pieceAt(row, col);
-  if (boardState.barricadeMode) {
-    if (occupant?.side === "police" && !boardState.actedIds.has(occupant.piece.id) && isMine(occupant.piece)) {
-      boardState.selectedId = occupant.piece.id; setGameMessage("Now tap a glowing square to put a wall between it and your unit."); renderLiveBoard(); return;
-    }
-    const unit = sidePieces("police").find((p) => p.id === boardState.selectedId);
-    if (!unit) { setGameMessage("Tap the police unit that will build the wall."); return; }
-    if (Math.abs(unit.row - row) + Math.abs(unit.col - col) !== 1) { setGameMessage("Pick a glowing square right next to your unit."); return; }
-    const key = edgeKey(unit, { row, col });
-    if (boardState.walls.has(key)) { setGameMessage("There is already a wall there."); return; }
-    boardState.walls.add(key);
-    if (!boardConnected()) { boardState.walls.delete(key); setGameMessage("That wall would close off an area. Try another side."); return; }
-    finishPieceAction(unit.id, "Wall built."); return;
-  }
   if (boardState.selectedId) {
     const selected = sidePieces(boardState.activeSide).find((piece) => piece.id === boardState.selectedId);
     const move = selected && legalMoves(selected, boardState.activeSide).find((target) => target.row === row && target.col === col);
     if (move) { movePiece(selected, boardState.activeSide, move); return; }
   }
-  if (occupant?.side === boardState.activeSide && !boardState.actedIds.has(occupant.piece.id) && isMine(occupant.piece)) {
-    boardState.selectedId = occupant.piece.id; setGameMessage("Choose a glowing square. Each active unit acts once in its team phase."); renderLiveBoard();
-  } else { boardState.selectedId = null; setGameMessage("Select an unused unit from the current team phase."); renderLiveBoard(); }
-}
-document.getElementById("barricade-toggle").addEventListener("click", () => {
-  if (boardState.winner || boardState.activeSide !== "police" || isComputerTurn() || isRemoteTurn()) return;
-  boardState.barricadeMode = !boardState.barricadeMode;
-  boardState.selectedId = null; boardState.barricadeAnchor = null;
-  if (boardState.barricadeMode) {
-    const mine = myUnactedPieces();
-    if (mine.length === 1) { boardState.selectedId = mine[0].id; setGameMessage("Tap a glowing square to put a wall between it and your unit."); }
-    else setGameMessage("Tap the police unit that will build the wall.");
-  } else setGameMessage("Wall mode off.");
+  boardState.selectedId = occupant?.side === boardState.activeSide && !boardState.actedIds.has(occupant.piece.id) && isMine(occupant.piece) ? occupant.piece.id : null;
+  setGameMessage("Tap a glowing square to move.");
   renderLiveBoard();
+}
+
+// ---------- Police walls: drag a wall onto any edge of the board ----------
+const wallShadow = document.getElementById("wall-shadow");
+const liveFrame = document.getElementById("live-frame");
+let wallDrag = null;
+function canBuildWall() {
+  return Boolean(boardState) && !boardState.winner && boardState.activeSide === "police" && selectedHumanSide() === "police" && !isComputerTurn() && !isRemoteTurn() && myUnactedPieces().length > 0;
+}
+const clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+function wallEdgeAt(x, y, orient) {
+  const rect = liveBoard.getBoundingClientRect(), n = boardState.size, cell = rect.width / n;
+  const px = x - rect.left, py = y - rect.top;
+  if (px < -cell || py < -cell || px > rect.width + cell || py > rect.height + cell) return null;
+  let a, b, box;
+  if (orient === "h") {
+    const line = clampN(Math.round(py / cell), 1, n - 1), col = clampN(Math.floor(px / cell), 0, n - 1);
+    a = { row: line - 1, col }; b = { row: line, col }; box = { left: col * cell, top: line * cell - 3, width: cell, height: 6 };
+  } else {
+    const line = clampN(Math.round(px / cell), 1, n - 1), row = clampN(Math.floor(py / cell), 0, n - 1);
+    a = { row, col: line - 1 }; b = { row, col: line }; box = { left: line * cell - 3, top: row * cell, width: 6, height: cell };
+  }
+  const key = edgeKey(a, b);
+  let valid = !boardState.walls.has(key), reason = valid ? "" : "There is already a wall there.";
+  if (valid) { boardState.walls.add(key); if (!boardConnected()) { valid = false; reason = "That wall would seal off an area."; } boardState.walls.delete(key); }
+  return { key, box, valid, reason, cell };
+}
+function showWallShadow(edge) {
+  if (!edge) { wallShadow.hidden = true; return; }
+  const board = liveBoard.getBoundingClientRect(), frame = liveFrame.getBoundingClientRect();
+  Object.assign(wallShadow.style, {
+    left: `${board.left - frame.left - liveFrame.clientLeft + edge.box.left}px`, top: `${board.top - frame.top - liveFrame.clientTop + edge.box.top}px`,
+    width: `${edge.box.width}px`, height: `${edge.box.height}px`
+  });
+  wallShadow.classList.toggle("invalid", !edge.valid); wallShadow.hidden = false;
+}
+function updateWallDrag(event) {
+  const x = event.clientX, y = event.clientY - wallDrag.lift;
+  const cell = liveBoard.getBoundingClientRect().width / boardState.size;
+  const horizontal = wallDrag.orient === "h";
+  Object.assign(wallDrag.ghost.style, { width: `${horizontal ? cell : 8}px`, height: `${horizontal ? 8 : cell}px`, left: `${x}px`, top: `${y}px` });
+  wallDrag.edge = wallEdgeAt(x, y, wallDrag.orient);
+  showWallShadow(wallDrag.edge);
+}
+function endWallDrag(event, apply) {
+  if (!wallDrag || event.pointerId !== wallDrag.pointerId) return;
+  const { ghost, edge } = wallDrag; wallDrag = null;
+  ghost.remove(); showWallShadow(null);
+  if (!apply) return;
+  if (!edge) { setGameMessage("Drop the wall on the board."); return; }
+  if (!edge.valid) { setGameMessage(edge.reason); return; }
+  if (!canBuildWall()) return;
+  const unit = myUnactedPieces()[0];
+  boardState.walls.add(edge.key);
+  finishPieceAction(unit.id, "Wall built.");
+}
+document.querySelectorAll(".wall-chip").forEach((chip) => {
+  chip.addEventListener("pointerdown", (event) => {
+    if (wallDrag) return;
+    if (!canBuildWall()) { setGameMessage("You can build a wall on your turn."); return; }
+    event.preventDefault(); chip.setPointerCapture(event.pointerId);
+    const ghost = document.createElement("div"); ghost.className = "wall-ghost"; document.body.append(ghost);
+    wallDrag = { orient: chip.dataset.orient, pointerId: event.pointerId, lift: event.pointerType === "touch" ? 56 : 0, ghost, edge: null };
+    updateWallDrag(event);
+  });
+  chip.addEventListener("pointermove", (event) => { if (wallDrag && event.pointerId === wallDrag.pointerId) updateWallDrag(event); });
+  chip.addEventListener("pointerup", (event) => endWallDrag(event, true));
+  chip.addEventListener("pointercancel", (event) => endWallDrag(event, false));
 });
 function movePiece(piece, side, destination) {
   const target = pieceAt(destination.row, destination.col);
@@ -795,16 +886,22 @@ function startOperation() {
   consecutiveSkips = 0;
   boardState = freshBoardState();
   document.getElementById("live-board").setAttribute("aria-label", `${boardState.size} by ${boardState.size} interactive heist board`);
-  playScreen.classList.remove("game-over"); setGameMessage("Crew team phase: each crew member takes one action.");
+  playScreen.classList.remove("game-over"); setGameMessage("Crew moves first. Tap a glowing square to move.");
   beginTeamPhase("crew");
 }
+const leaveDialog = document.getElementById("leave-dialog");
 document.getElementById("back-to-briefing").addEventListener("click", () => {
-  clearComputerTimer(); playScreen.hidden = true; gameScreen.hidden = false; window.scrollTo(0, 0); document.getElementById("begin-operation").focus();
+  document.getElementById("leave-copy").textContent = crewChoices.mode === "multiplayer"
+    ? "The match is still running. If you leave, you drop out of the room and your team plays without you."
+    : "The match is still running. If you leave now, your progress is lost.";
+  leaveDialog.showModal();
 });
-document.getElementById("restart-operation").addEventListener("click", () => {
-  if (crewChoices.mode === "multiplayer" && !isRoomHost) return;
-  startOperation();
-  if (crewChoices.mode === "multiplayer") broadcastRoom("game-start", { state: serializeBoardSnapshot() });
+document.getElementById("leave-stay").addEventListener("click", () => leaveDialog.close());
+leaveDialog.addEventListener("click", (event) => { if (event.target === leaveDialog) leaveDialog.close(); });
+document.getElementById("leave-confirm").addEventListener("click", async () => {
+  leaveDialog.close(); clearComputerTimer(); wallDrag?.ghost.remove(); wallDrag = null;
+  if (crewChoices.mode === "multiplayer") { await leaveRoom(); showScreen(modeScreen); return; }
+  playScreen.hidden = true; gameScreen.hidden = false; window.scrollTo(0, 0); document.getElementById("begin-operation").focus();
 });
 document.getElementById("play-again").addEventListener("click", () => {
   if (crewChoices.mode === "multiplayer" && !isRoomHost) return;
