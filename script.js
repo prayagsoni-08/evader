@@ -409,6 +409,7 @@ function resetRoomUI() {
 }
 async function leaveRoom() {
   const channel = activeRoomChannel; activeRoomChannel = null;
+  pendingMoveProposal = null;
   if (lobbyChannel) { try { await lobbyChannel.untrack(); } catch { /* ignore */ } }
   if (channel && supabaseClient) { try { await supabaseClient.removeChannel(channel); } catch { /* already closed */ } }
   resetRoomUI();
@@ -538,17 +539,51 @@ async function connectToRoom(code, host) {
       const requester = currentRoomPlayers().find((player) => player.playerId === payload.senderId);
       if (!isRoomHost || !operationStarted || !requester) return;
       const state = serializeBoardSnapshot();
-      if (requester.inGame || payload.inGame) broadcastRoom("game-state", { revision: boardRevision, force: true, state }).catch(() => {});
+      if (requester.inGame || payload.inGame) sendCanonicalBoardSnapshot(true);
       else broadcastRoom("game-start", { revision: 0, state }).catch(() => {});
+    })
+    .on("broadcast", { event: "sync-reject" }, ({ payload }) => {
+      if (payload.targetId !== roomPlayerId) return;
+      pendingMoveProposal = null;
+      setGameMessage("Move was out of sync. The room restored the latest board state.");
     })
     .on("broadcast", { event: "game-state" }, ({ payload }) => {
       const sender = currentRoomPlayers().find((player) => player.playerId === payload.senderId);
       if (payload.senderId === roomPlayerId || !sender) return;
-      const forcedHostSync = Boolean(payload.force && sender.host);
+
+      // Clients submit their move snapshot to the host. Only the player who owns
+      // the current piece may advance it; the host assigns the shared revision.
+      if (isRoomHost && !sender.host) {
+        if (!Number.isInteger(payload.revision) || payload.revision > boardRevision) {
+          broadcastRoom("sync-reject", { targetId: sender.playerId }).catch(() => {});
+          if (boardState) sendCanonicalBoardSnapshot(true);
+          return;
+        }
+        if (payload.revision < boardRevision) {
+          if (boardState) sendCanonicalBoardSnapshot(true);
+          return;
+        }
+        const actingPiece = boardState && nextActingPiece();
+        if (!actingPiece || actingPiece.owner !== sender.playerId || !isValidBoardSnapshot(payload.state)) {
+          broadcastRoom("sync-reject", { targetId: sender.playerId }).catch(() => {});
+          if (boardState) sendCanonicalBoardSnapshot(true);
+          return;
+        }
+        if (!applyBoardSnapshot(payload.state, boardRevision + 1)) return;
+        if (!operationStarted) { operationStarted = true; roomStarted = true; }
+        renderLiveBoard();
+        sendCanonicalBoardSnapshot();
+        return;
+      }
+
+      // Everyone else accepts canonical snapshots only from the current host.
+      if (!sender.host) return;
+      const forcedHostSync = Boolean(payload.force);
       if (!Number.isInteger(payload.revision) || (!forcedHostSync && payload.revision <= boardRevision) || !applyBoardSnapshot(payload.state, payload.revision)) return;
-      if (!operationStarted) { operationStarted = true; roomStarted = true; showScreen(playScreen); }
+      if (pendingMoveProposal && payload.revision > pendingMoveProposal.revision) pendingMoveProposal = null;
+      if (!operationStarted) { operationStarted = true; roomStarted = true; trackSelf().catch(() => {}); showScreen(playScreen); }
+      else if (forcedHostSync && pendingMoveProposal) window.setTimeout(() => sendMoveProposal(pendingMoveProposal), 150);
       renderLiveBoard();
-      if (isRoomHost) broadcastRoom("game-state", { revision: boardRevision, state: serializeBoardSnapshot() }).catch(() => {});
     });
   let settled = false;
   await new Promise((resolve, reject) => {
@@ -598,6 +633,7 @@ document.getElementById("begin-operation").addEventListener("click", async () =>
 
 let boardState;
 let boardRevision = 0;
+let pendingMoveProposal = null;
 let computerTimer = null;
 function clearComputerTimer() { if (computerTimer) { window.clearTimeout(computerTimer); computerTimer = null; } }
 function scheduleComputerMove() { clearComputerTimer(); computerTimer = window.setTimeout(makeComputerMove, 300); }
@@ -824,10 +860,35 @@ function applyBoardSnapshot(snapshot, revision = 0) {
   if (boardState.winner) showVictoryScreen();
   return true;
 }
+function sendMoveProposal(proposal, retry = 0) {
+  if (!activeRoomChannel || !proposal) return;
+  broadcastRoom("game-state", proposal).catch((error) => {
+    setGameMessage(`Move update failed: ${error.message}`);
+    if (retry < 3) window.setTimeout(() => {
+      if (pendingMoveProposal === proposal) sendMoveProposal(proposal, retry + 1);
+    }, 400 * (retry + 1));
+  });
+}
+function sendCanonicalBoardSnapshot(force = false, retry = 0) {
+  if (!isRoomHost || !activeRoomChannel || !boardState) return;
+  const revision = boardRevision;
+  const state = serializeBoardSnapshot();
+  broadcastRoom("game-state", { revision, force, state }).catch((error) => {
+    setGameMessage(`Board sync failed: ${error.message}`);
+    if (retry < 3) window.setTimeout(() => {
+      if (isRoomHost && activeRoomChannel && boardRevision >= revision) sendCanonicalBoardSnapshot(force, retry + 1);
+    }, 400 * (retry + 1));
+  });
+}
 function broadcastBoardSnapshot() {
-  if (crewChoices.mode === "multiplayer" && activeRoomChannel) {
+  if (crewChoices.mode !== "multiplayer" || !activeRoomChannel) return;
+  const state = serializeBoardSnapshot();
+  if (isRoomHost) {
     boardRevision += 1;
-    broadcastRoom("game-state", { revision: boardRevision, state: serializeBoardSnapshot() }).catch((error) => setGameMessage(error.message));
+    sendCanonicalBoardSnapshot();
+  } else {
+    pendingMoveProposal = { revision: boardRevision, state };
+    sendMoveProposal(pendingMoveProposal);
   }
 }
 function beginTeamPhase(side) {
@@ -1045,6 +1106,7 @@ function computerMoveScore(candidate, side) {
 function startOperation() {
   clearComputerTimer();
   boardRevision = 0;
+  pendingMoveProposal = null;
   document.getElementById("victory-screen").hidden = true;
   consecutiveSkips = 0;
   boardState = freshBoardState();
@@ -1081,7 +1143,8 @@ document.addEventListener("visibilitychange", () => {
     refreshLobby().then(() => renderLiveRooms()).catch((error) => { document.getElementById("join-status").textContent = error.message; });
   }
   if (activeRoomChannel && roomStarted && !isRoomHost) {
-    broadcastRoom("state-request", { inGame: operationStarted }).catch(() => {});
+    if (pendingMoveProposal) sendMoveProposal(pendingMoveProposal);
+    else broadcastRoom("state-request", { inGame: operationStarted }).catch(() => {});
   }
 });
 window.addEventListener("pagehide", () => {
