@@ -556,7 +556,8 @@ function renderLiveBoard() {
   const focusedCell = document.activeElement?.classList?.contains("play-cell") ? { row: document.activeElement.dataset.row, col: document.activeElement.dataset.col } : null;
   document.getElementById("live-grid-size").innerHTML = `${String(boardState.size).padStart(2, "0")} <i>×</i> ${String(boardState.size).padStart(2, "0")}`;
   const selected = sidePieces(boardState.activeSide).find((piece) => piece.id === boardState.selectedId);
-  const targets = selected ? legalMoves(selected, boardState.activeSide) : [];
+  const barricadeTargets = boardState.barricadeMode && selected ? [[-1, 0], [1, 0], [0, -1], [0, 1]].map(([dr, dc]) => ({ row: selected.row + dr, col: selected.col + dc })).filter((c) => insideBoard(c.row, c.col) && !boardState.walls.has(edgeKey(selected, c))) : [];
+  const targets = boardState.barricadeMode ? [] : selected ? legalMoves(selected, boardState.activeSide) : [];
   const door = boardState.door, mySide = selectedHumanSide();
   for (let row = 0; row < boardState.size; row += 1) for (let col = 0; col < boardState.size; col += 1) {
     const cell = document.createElement("button"); cell.type = "button"; cell.className = "play-cell";
@@ -566,6 +567,7 @@ function renderLiveBoard() {
     if (isSelected) cell.classList.add("selected-cell");
     if (boardState.barricadeAnchor?.row === row && boardState.barricadeAnchor?.col === col) cell.classList.add("barricade-anchor");
     if (targets.some((m) => m.row === row && m.col === col)) cell.classList.add("legal-cell");
+    if (barricadeTargets.some((m) => m.row === row && m.col === col)) cell.classList.add("barricade-target");
     const wallClasses = [];
     if (row > 0 && blocked({ row, col }, { row: row - 1, col })) wallClasses.push("wall-top");
     if (col > 0 && blocked({ row, col }, { row, col: col - 1 })) wallClasses.push("wall-left");
@@ -592,7 +594,7 @@ function renderLiveBoard() {
   const barricadeButton = document.getElementById("barricade-toggle");
   barricadeButton.hidden = Boolean(boardState.winner) || boardState.activeSide !== "police" || isComputerTurn() || isRemoteTurn();
   barricadeButton.setAttribute("aria-pressed", String(boardState.barricadeMode));
-  barricadeButton.textContent = boardState.barricadeMode ? "Cancel barricade" : "Place barricade";
+  barricadeButton.textContent = boardState.barricadeMode ? "Cancel wall" : "Build a wall";
   playScreen.classList.toggle("game-over", Boolean(boardState.winner));
   const restartButton = document.getElementById("restart-operation");
   restartButton.textContent = boardState.winner ? "Play again" : "Restart operation";
@@ -662,24 +664,17 @@ function handleBoardCellClick(event) {
   if (boardState.winner || isComputerTurn() || isRemoteTurn()) return;
   const row = Number(event.currentTarget.dataset.row), col = Number(event.currentTarget.dataset.col), occupant = pieceAt(row, col);
   if (boardState.barricadeMode) {
-    if (!boardState.selectedId && occupant?.side === "police" && !boardState.actedIds.has(occupant.piece.id) && isMine(occupant.piece)) {
-      boardState.selectedId = occupant.piece.id; setGameMessage("Police unit selected. Choose any two adjacent squares to barricade their passage."); renderLiveBoard(); return;
+    if (occupant?.side === "police" && !boardState.actedIds.has(occupant.piece.id) && isMine(occupant.piece)) {
+      boardState.selectedId = occupant.piece.id; setGameMessage("Now tap a glowing square to put a wall between it and your unit."); renderLiveBoard(); return;
     }
-    if (!boardState.selectedId) { setGameMessage("Select an unused police unit first."); return; }
-    if (!boardState.barricadeAnchor) {
-      boardState.barricadeAnchor = { row, col };
-      setGameMessage("Now choose a square directly beside it. The barricade can be placed anywhere on the board.");
-      renderLiveBoard();
-      return;
-    }
-    const first = boardState.barricadeAnchor, second = { row, col };
-    const distance = Math.abs(first.row - second.row) + Math.abs(first.col - second.col);
-    if (distance !== 1) { setGameMessage("Choose a square directly beside the first one."); return; }
-    const key = edgeKey(first, second);
-    if (boardState.walls.has(key)) { setGameMessage("That passage is already barricaded."); return; }
+    const unit = sidePieces("police").find((p) => p.id === boardState.selectedId);
+    if (!unit) { setGameMessage("Tap the police unit that will build the wall."); return; }
+    if (Math.abs(unit.row - row) + Math.abs(unit.col - col) !== 1) { setGameMessage("Pick a glowing square right next to your unit."); return; }
+    const key = edgeKey(unit, { row, col });
+    if (boardState.walls.has(key)) { setGameMessage("There is already a wall there."); return; }
     boardState.walls.add(key);
-    if (!boardConnected()) { boardState.walls.delete(key); setGameMessage("Barricades cannot form a closed area."); return; }
-    finishPieceAction(boardState.selectedId, "Passage barricaded."); return;
+    if (!boardConnected()) { boardState.walls.delete(key); setGameMessage("That wall would close off an area. Try another side."); return; }
+    finishPieceAction(unit.id, "Wall built."); return;
   }
   if (boardState.selectedId) {
     const selected = sidePieces(boardState.activeSide).find((piece) => piece.id === boardState.selectedId);
@@ -693,9 +688,13 @@ function handleBoardCellClick(event) {
 document.getElementById("barricade-toggle").addEventListener("click", () => {
   if (boardState.winner || boardState.activeSide !== "police" || isComputerTurn() || isRemoteTurn()) return;
   boardState.barricadeMode = !boardState.barricadeMode;
-  boardState.selectedId = null;
-  boardState.barricadeAnchor = null;
-  setGameMessage(boardState.barricadeMode ? "Select a police unit, then an adjacent passage." : "Barricade cancelled."); renderLiveBoard();
+  boardState.selectedId = null; boardState.barricadeAnchor = null;
+  if (boardState.barricadeMode) {
+    const mine = myUnactedPieces();
+    if (mine.length === 1) { boardState.selectedId = mine[0].id; setGameMessage("Tap a glowing square to put a wall between it and your unit."); }
+    else setGameMessage("Tap the police unit that will build the wall.");
+  } else setGameMessage("Wall mode off.");
+  renderLiveBoard();
 });
 function movePiece(piece, side, destination) {
   const target = pieceAt(destination.row, destination.col);
@@ -739,7 +738,7 @@ function showVictoryScreen() {
     : (mySide === "police" ? "Every crew member was caught. You stopped the heist." : "The whole crew was caught. The heist failed.");
   const replayButton = document.getElementById("play-again");
   replayButton.disabled = crewChoices.mode === "multiplayer" && !isRoomHost;
-  replayButton.innerHTML = replayButton.disabled ? "Waiting for host" : 'Play again <span class="button-arrow" aria-hidden="true">↗</span>';
+  replayButton.textContent = replayButton.disabled ? "Waiting for host" : "Play again";
   playScreen.hidden = true;
   document.getElementById("victory-screen").hidden = false;
   document.getElementById("play-again").focus();

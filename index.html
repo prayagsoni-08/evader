@@ -8,7 +8,7 @@
   <title>Evader: The Cash Heist</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Special+Elite&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Special+Elite&display=swap">
   <link rel="preload" as="image" href="assets/heist-hostage-scene.jpg" media="(min-width: 46.01rem)">
   <link rel="preload" as="image" href="assets/heist-hostage-scene.jpg" media="(max-width: 46rem)">
   <link rel="stylesheet" href="style.css">
@@ -28,7 +28,12 @@
 
     <header class="topbar">
       <a class="wordmark wordmark-hero" href="#home" aria-label="Evader: The Cash Heist home">
-        <span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span>
+        <svg class="nx-logo" viewBox="0 0 128 70" role="img" aria-label="Evader">
+          <defs><linearGradient id="nxg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff3b30"/><stop offset="1" stop-color="#8d0d12"/></linearGradient></defs>
+          <path fill="url(#nxg)" d="M6 64V6h15l26 38V6h15v58H47L21 26v38z"/>
+          <g stroke="url(#nxg)" stroke-width="12" fill="none"><path d="M78 8l34 54"/><path d="M116 8L86 56"/></g>
+          <path d="M70 52l52-34" stroke="#041014" stroke-width="4" fill="none" opacity=".85"/>
+        </svg>
       </a>
     </header>
 
@@ -37,7 +42,7 @@
 
       <nav class="main-actions" aria-label="Main menu">
         <button class="button button-play" id="play-button" type="button">
-          <span>Play</span><span class="button-arrow" aria-hidden="true">↗</span>
+          <span>Play</span>
         </button>
         <button class="button button-about" id="about-button" type="button">About</button>
       </nav>
@@ -53,13 +58,12 @@
     <section class="crew-panel">
       <header class="crew-topbar">
         <a class="back-link" href="#home" id="back-to-home" aria-label="Back to home"><span aria-hidden="true">←</span> HOME</a>
-        <a class="wordmark" href="#home" aria-label="Home"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
       </header>
       <div class="crew-content">
         <h2 id="crew-title">WHO'S<br><span>PLAYING?</span></h2>
         <label class="field-label" for="player-name">PLAYER NAME</label>
         <input id="player-name" class="text-input" type="text" maxlength="16" autocomplete="nickname" placeholder="Enter your name">
-        <div class="crew-actions"><button class="button button-play" id="continue-button" type="button">Continue <span class="button-arrow" aria-hidden="true">↗</span></button></div>
+        <div class="crew-actions"><button class="button button-play" id="continue-button" type="button">Continue</button></div>
         <p class="crew-status" id="crew-status" role="status" aria-live="polite">Use 2–16 letters or numbers. Your name is saved on this device.</p>
       </div>
     </section>
@@ -68,7 +72,6 @@
     <section class="crew-panel">
       <header class="crew-topbar">
         <button class="back-link" type="button" data-back="crew-screen"><span aria-hidden="true">←</span> BACK</button>
-        <a class="wordmark" href="#home" aria-label="Back to home"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
       </header>
       <div class="crew-content">
         <h2>CHOOSE<br><span>MODE</span></h2>
@@ -84,7 +87,6 @@
     <section class="crew-panel">
       <header class="crew-topbar">
         <button class="back-link" type="button" data-back="mode-screen"><span aria-hidden="true">←</span> BACK</button>
-        <a class="wordmark" href="#home" aria-label="Back to home"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
       </header>
       <div class="crew-content">
         <h2>CHOOSE YOUR<br><span>SIDE</span></h2>
@@ -92,7 +94,7 @@
           <button class="choice-card" type="button" data-choice="role" data-value="crew" aria-pressed="false"><span class="choice-icon" aria-hidden="true">◈</span><span class="choice-title">HEIST CREW</span></button>
           <button class="choice-card" type="button" data-choice="role" data-value="police" aria-pressed="false"><span class="choice-icon" aria-hidden="true">✦</span><span class="choice-title">POLICE</span></button>
         </div>
-        <div class="crew-actions"><button class="button button-play" id="side-start" type="button" disabled>Start <span class="button-arrow" aria-hidden="true">↗</span></button></div>
+        <div class="crew-actions"><button class="button button-play" id="side-start" type="button" disabled>Start</button></div>
       </div>
     </section>
   </section>
@@ -100,7 +102,6 @@
     <section class="crew-panel">
       <header class="crew-topbar">
         <button class="back-link" type="button" data-back="mode-screen"><span aria-hidden="true">←</span> BACK</button>
-        <a class="wordmark" href="#home" aria-label="Back to home"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
       </header>
       <div class="crew-content">
         <h2>CREATE<br><span>ROOM</span></h2>
@@ -121,7 +122,6 @@
     <section class="crew-panel">
       <header class="crew-topbar">
         <button class="back-link" type="button" data-back="mode-screen"><span aria-hidden="true">←</span> BACK</button>
-        <a class="wordmark" href="#home" aria-label="Back to home"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
       </header>
       <div class="crew-content">
         <h2>JOIN<br><span>ROOM</span></h2>
@@ -141,7 +141,6 @@
   <section class="lobby-screen" id="lobby-screen" aria-labelledby="lobby-title" hidden>
     <header class="lobby-topbar">
       <button class="back-link" id="back-to-setup" type="button"><span aria-hidden="true">←</span> LEAVE</button>
-      <a class="wordmark" href="#home" aria-label="Evader: The Cash Heist"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
       <span class="operation-label">MULTIPLAYER <i>/</i> LOBBY</span>
     </header>
     <div class="lobby-content">
@@ -159,7 +158,6 @@
   <section class="game-screen" id="game-screen" aria-labelledby="selected-side-title" hidden>
     <header class="game-topbar">
       <button class="back-link" id="back-to-crew" type="button"><span aria-hidden="true">←</span> SETUP</button>
-      <a class="wordmark" href="#home" aria-label="Evader: The Cash Heist"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
       <span class="operation-label">OPERATION 01 <i>/</i> THE BANK</span>
     </header>
 
@@ -172,7 +170,7 @@
         <h3>OBJECTIVE</h3>
         <p class="objective-copy" id="objective-copy">Secure the cash and make it to an exit before the police close in.</p>
         <p class="briefing-room-details" id="briefing-room-details" hidden></p>
-        <button class="button button-play begin-button" id="begin-operation" type="button">Begin operation <span class="button-arrow" aria-hidden="true">↗</span></button>
+        <button class="button button-play begin-button" id="begin-operation" type="button">Begin operation</button>
         <p class="game-status" id="game-status" role="status" aria-live="polite">The vault is ready. Begin the operation.</p>
       </aside>
     </div>
@@ -180,7 +178,6 @@
   <section class="play-screen" id="play-screen" aria-labelledby="play-title" hidden>
     <header class="play-topbar">
       <button class="back-link" id="back-to-briefing" type="button"><span aria-hidden="true">←</span> BRIEFING</button>
-      <a class="wordmark" href="#home" aria-label="Evader: The Cash Heist"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
       <span class="operation-label">OPERATION 01 <i>/</i> LIVE</span>
     </header>
     <div class="play-layout">
@@ -204,7 +201,7 @@
           <div><span class="legend-door"></span> EXIT DOOR</div>
         </div>
         <p class="live-message" id="live-message" role="status" aria-live="polite">Crew moves first.</p>
-        <button class="button button-about restart-button" id="barricade-toggle" type="button" aria-pressed="false" hidden>Place barricade</button>
+        <button class="button button-about restart-button" id="barricade-toggle" type="button" aria-pressed="false" hidden>Build a wall</button>
         <button class="button button-about restart-button" id="restart-operation" type="button">Restart operation</button>
       </aside>
     </div>
@@ -213,7 +210,6 @@
     <div class="victory-art" id="victory-art" role="img" aria-label=""></div>
     <div class="victory-shade" aria-hidden="true"></div>
     <header class="victory-topbar">
-      <a class="wordmark" href="#home" aria-label="Evader: The Cash Heist"><span class="wordmark-mark" aria-hidden="true">N<span class="nx-x">x</span></span></a>
       <span class="operation-label">OPERATION 01 <i>/</i> RESOLUTION</span>
     </header>
     <div class="victory-content">
@@ -221,7 +217,7 @@
       <h1 id="victory-title">THE HEIST<br><span>SUCCEEDED</span></h1>
       <p id="victory-copy">The crew made it out with the cash.</p>
       <div class="victory-actions">
-        <button class="button button-play" id="play-again" type="button">Play again <span class="button-arrow" aria-hidden="true">↗</span></button>
+        <button class="button button-play" id="play-again" type="button">Play again</button>
         <button class="button button-about" id="victory-home" type="button">Main menu</button>
       </div>
     </div>
